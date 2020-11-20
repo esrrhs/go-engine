@@ -11,10 +11,11 @@ type TMysql struct {
 	dsn   string
 	table string
 	day   int
+	conn  int
 }
 
-func NewTMysql(dsn string, table string, day int) *TMysql {
-	return &TMysql{dsn: dsn, table: table, day: day}
+func NewTMysql(dsn string, conn int, table string, day int) *TMysql {
+	return &TMysql{dsn: dsn, conn: conn, table: table, day: day}
 }
 
 func (t *TMysql) Load() error {
@@ -27,6 +28,10 @@ func (t *TMysql) Load() error {
 		return err
 	}
 	t.gdb = db
+
+	t.gdb.SetConnMaxLifetime(0)
+	t.gdb.SetMaxIdleConns(t.conn)
+	t.gdb.SetMaxOpenConns(t.conn)
 
 	loggo.Info("mysql dht Load ok")
 
@@ -120,4 +125,59 @@ func (t *TMysql) Has(key string) bool {
 	}
 
 	return false
+}
+
+type TMysqlFindData struct {
+	Name  string
+	Value string
+}
+
+func (t *TMysql) Last(n int) []TMysqlFindData {
+	var ret []TMysqlFindData
+
+	rows, err := t.gdb.Query("select name, value from tmysql." + t.table + " order by time desc limit 0," + strconv.Itoa(n))
+	if err != nil {
+		loggo.Error("TMysql Query fail %v", err)
+		return ret
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+
+		var name string
+		var value string
+		err = rows.Scan(&name, &value)
+		if err != nil {
+			loggo.Error("TMysql Scan fail %v", err)
+		}
+
+		ret = append(ret, TMysqlFindData{name, value})
+	}
+
+	return ret
+}
+
+func (t *TMysql) FindValue(str string, max int) []TMysqlFindData {
+	var ret []TMysqlFindData
+
+	rows, err := t.gdb.Query("select name, value from tmysql." + t.table + " where value like '%" + str + "%' limit 0," + strconv.Itoa(max))
+	if err != nil {
+		loggo.Error("TMysql Query fail %v", err)
+		return ret
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+
+		var name string
+		var value string
+		err = rows.Scan(&name, &value)
+		if err != nil {
+			loggo.Error("Scan sqlite3 fail %v", err)
+		}
+
+		ret = append(ret, TMysqlFindData{name, value})
+	}
+
+	return ret
 }

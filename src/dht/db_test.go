@@ -14,7 +14,7 @@ func Test0001(t *testing.T) {
 	dbconfig.Addr = "192.168.0.106:4406"
 	dbconfig.Net = "tcp"
 
-	f := Load(dbconfig.FormatDSN())
+	f := Load(dbconfig.FormatDSN(), 10)
 	if f == nil {
 		return
 	}
