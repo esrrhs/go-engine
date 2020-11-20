@@ -20,7 +20,7 @@ func Load(dsn string, conn int) error {
 
 	err := gdht.Load()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	loggo.Info("mysql dht Load ok")
