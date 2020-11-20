@@ -35,6 +35,7 @@ golang的通用开发库
 * HTML生成
 * ChartJS适配
 * FIFO消息
+* Mysql自失效KV表
 #### 第三方
 * IP查询
 
