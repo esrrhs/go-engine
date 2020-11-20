@@ -85,7 +85,7 @@ func (t *TMysql) Insert(key string, value string) error {
 
 	num := t.GetSize()
 
-	loggo.Info("TMysql InsertSpider ok %v %v %v", key, value, num)
+	loggo.Info("TMysql InsertSpider ok %v %v %v %v", t.table, key, value, num)
 
 	return nil
 }
