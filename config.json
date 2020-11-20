@@ -1,0 +1,9 @@
+{
+  "init" : ["init_linux.sh"],
+  "extract": [
+	"/node/linux/node_modules/puppeteer/.local-chromium/linux-662092/chrome-linux/chrome",
+	"/data/texas/texas_data_opt_5.txt",
+	"/data/texas/texas_data_opt_6.txt",
+	"/node/darwin/node_modules/puppeteer/.local-chromium/mac-662092/chrome-mac/Chromium.app/Contents/Frameworks/Chromium Framework.framework/Versions/76.0.3803.0/Chromium Framework"
+  ]
+}
