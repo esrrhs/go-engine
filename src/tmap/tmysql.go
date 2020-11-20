@@ -42,7 +42,7 @@ func (t *TMysql) Load() error {
 	}
 
 	_, err = t.gdb.Exec("CREATE TABLE IF NOT EXISTS tmysql." + t.table + "(" +
-		"name VARCHAR(40) NOT NULL," +
+		"name VARCHAR(1000) NOT NULL," +
 		"value VARCHAR(1000) NOT NULL," +
 		"time DATETIME NOT NULL," +
 		"PRIMARY KEY(name));")
