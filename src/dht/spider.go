@@ -92,7 +92,12 @@ func OnCrawl(w *dht.Wire) {
 }
 
 func InsertSpider(infohash string, name string) {
-	gdht.Insert(infohash, name)
+	if gdht.Insert(infohash, name) != nil {
+		return
+	}
+	if gcb != nil {
+		gcb(infohash, name)
+	}
 }
 
 func GetSize() int {
