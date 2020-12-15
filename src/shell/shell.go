@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func Run(script string, silent bool, param ...string) string {
+func Run(script string, silent bool, param ...string) (string, error) {
 
 	script = filepath.Clean(script)
 	script = filepath.ToSlash(script)
@@ -28,7 +28,7 @@ func Run(script string, silent bool, param ...string) string {
 	outstr := string(out)
 	if err != nil {
 		loggo.Warn("shell Run fail %v %v", cmd.Args, outstr)
-		return ""
+		return "", err
 	}
 
 	if !silent {
@@ -36,10 +36,10 @@ func Run(script string, silent bool, param ...string) string {
 		loggo.Info("%v", outstr)
 	}
 
-	return outstr
+	return outstr, nil
 }
 
-func RunTimeout(script string, silent bool, timeout int, param ...string) string {
+func RunTimeout(script string, silent bool, timeout int, param ...string) (string, error) {
 
 	script = filepath.Clean(script)
 	script = filepath.ToSlash(script)
@@ -62,17 +62,17 @@ func RunTimeout(script string, silent bool, timeout int, param ...string) string
 	outstr := string(out)
 	if err != nil {
 		loggo.Warn("shell Run fail %v %v %v", cmd.Args, outstr, ctx.Err())
-		return ""
+		return "", err
 	}
 
 	if !silent {
 		loggo.Info("shell Run ok %v %v", cmd.Args, time.Now().Sub(begin))
 		loggo.Info("%v", outstr)
 	}
-	return outstr
+	return outstr, nil
 }
 
-func RunCommand(command string, silent bool) string {
+func RunCommand(command string, silent bool) (string, error) {
 
 	if !silent {
 		loggo.Info("shell RunCommand start %v ", command)
@@ -84,7 +84,7 @@ func RunCommand(command string, silent bool) string {
 	outstr := string(out)
 	if err != nil {
 		loggo.Warn("shell RunCommand fail %v %v %v", cmd.Args, outstr, err)
-		return ""
+		return "", err
 	}
 
 	if !silent {
@@ -92,10 +92,10 @@ func RunCommand(command string, silent bool) string {
 		loggo.Info("%v", outstr)
 	}
 
-	return outstr
+	return outstr, nil
 }
 
-func RunExe(exe string, silent bool, param ...string) string {
+func RunExe(exe string, silent bool, param ...string) (string, error) {
 
 	exe = filepath.Clean(exe)
 	exe = filepath.ToSlash(exe)
@@ -110,7 +110,7 @@ func RunExe(exe string, silent bool, param ...string) string {
 	outstr := string(out)
 	if err != nil {
 		loggo.Warn("shell Run fail %v %v %v", cmd.Args, outstr, err)
-		return ""
+		return "", err
 	}
 
 	if !silent {
@@ -118,10 +118,10 @@ func RunExe(exe string, silent bool, param ...string) string {
 		loggo.Info("%v", outstr)
 	}
 
-	return outstr
+	return outstr, nil
 }
 
-func RunExeTimeout(exe string, silent bool, timeout int, param ...string) string {
+func RunExeTimeout(exe string, silent bool, timeout int, param ...string) (string, error) {
 
 	d := time.Now().Add(time.Duration(timeout) * time.Second)
 	ctx, cancel := context.WithDeadline(context.Background(), d)
@@ -141,7 +141,7 @@ func RunExeTimeout(exe string, silent bool, timeout int, param ...string) string
 	outstr := string(out)
 	if err != nil {
 		loggo.Warn("shell Run fail %v %v %v", cmd.Args, outstr, err)
-		return ""
+		return "", err
 	}
 
 	if !silent {
@@ -149,5 +149,5 @@ func RunExeTimeout(exe string, silent bool, timeout int, param ...string) string
 		loggo.Info("%v", outstr)
 	}
 
-	return outstr
+	return outstr, nil
 }

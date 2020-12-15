@@ -79,7 +79,7 @@ func getChrome() {
 	defer common.CrashLog()
 
 	for {
-		ret := shell.Run(common.GetNodeDir()+"/get_chrome.sh", true, common.GetNodeDir())
+		ret, _ := shell.Run(common.GetNodeDir()+"/get_chrome.sh", true, common.GetNodeDir())
 		ret = strings.TrimSpace(ret)
 		if len(ret) > 0 {
 			if ret != gSpiderData.chromeWSEndpoint {
