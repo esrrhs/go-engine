@@ -50,7 +50,7 @@ func ini() {
 	if runtime.GOOS == "linux" {
 		go startChrome()
 		go getChrome()
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 60; i++ {
 			if len(gSpiderData.chromeWSEndpoint) > 0 {
 				break
 			}
@@ -98,6 +98,7 @@ func startChrome() {
 		shell.RunTimeout(common.GetNodeDir()+"/close_chrome.sh", true, 60)
 		loggo.Info("spider restart chrome ")
 		shell.Run(common.GetNodeDir()+"/start_chrome.sh", true, common.GetNodeDir())
+		loggo.Info("spider exit chrome ")
 		time.Sleep(time.Second)
 	}
 }
