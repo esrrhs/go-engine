@@ -2,8 +2,8 @@ package cryptonight
 
 import (
 	"encoding/binary"
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/internal/aes"
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/internal/sha3"
+	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/aes"
+	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/sha3"
 )
 
 func (cc *cache) sumGo(data []byte, variant int) []byte {

@@ -18,7 +18,7 @@ jobs:
 
     - name: Get dependencies
       run: |
-        GO111MODULE=off go get -v -t -d ./...
+        go get -v -t -d ./...
         if [ -f Gopkg.toml ]; then
             curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
             dep ensure
@@ -29,7 +29,7 @@ jobs:
         cd src
         for d in */ ; do
          cd "$d"
-         GO111MODULE=off go build -v .
-         GO111MODULE=off go test . -v
+         go build -v .
+         go test . -v
          cd ..
         done

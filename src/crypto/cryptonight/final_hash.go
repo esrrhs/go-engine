@@ -2,9 +2,9 @@ package cryptonight
 
 import (
 	"github.com/decred/dcrd/crypto/blake256"
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/internal/groestl"
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/internal/jh"
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/internal/skein"
+	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/groestl"
+	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/jh"
+	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/skein"
 	"hash"
 	"sync"
 	"unsafe"

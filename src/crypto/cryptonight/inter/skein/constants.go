@@ -4,7 +4,7 @@
 
 package skein
 
-import "github.com/esrrhs/go-engine/src/crypto/cryptonight/internal/skein/threefish"
+import "github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/skein/threefish"
 
 const (
 	// The blocksize of Skein-512 in bytes.
