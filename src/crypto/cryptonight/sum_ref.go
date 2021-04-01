@@ -6,7 +6,7 @@ import (
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/sha3"
 )
 
-func (cc *cache) sumGo(data []byte, variant int) []byte {
+func (cc *cache) sum(data []byte, variant int) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
