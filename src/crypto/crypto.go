@@ -3,7 +3,15 @@ package crypto
 import "github.com/esrrhs/go-engine/src/crypto/cryptonight"
 
 func Sum(data []byte, algo string) []byte {
-	return cryptonight.Sum(data, 0)
+	switch algo {
+	case "cn/0":
+		return cryptonight.Sum(data, 0)
+	case "cn/1":
+		return cryptonight.Sum(data, 1)
+	case "cn/2":
+		return cryptonight.Sum(data, 2)
+	}
+	return nil
 }
 
 func TestSum(algo string) bool {
