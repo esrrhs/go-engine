@@ -42,6 +42,14 @@ func Sum(data []byte, variant int) []byte {
 	return sum
 }
 
+func sumGo(data []byte, variant int) []byte {
+	cc := cachePool.Get().(*cache)
+	sum := cc.sumGo(data, variant)
+	cachePool.Put(cc)
+
+	return sum
+}
+
 type hashSpec struct {
 	input, output string // both in hex
 	variant       int
@@ -156,6 +164,10 @@ func TestSum(variant int) bool {
 			if hex.EncodeToString(result) != v.output {
 				return false
 			}
+			resultgo := sumGo(in, v.variant)
+			if hex.EncodeToString(resultgo) != v.output {
+				return false
+			}
 		}
 		return true
 	}
@@ -164,6 +176,12 @@ func TestSum(variant int) bool {
 		for _, v := range hashSpecs {
 			result := Sum(v.input[0:76], v.variant)
 			for j, _ := range result {
+				if result[j] != v.output[j] {
+					return false
+				}
+			}
+			resultgo := sumGo(v.input[0:76], v.variant)
+			for j, _ := range resultgo {
 				if result[j] != v.output[j] {
 					return false
 				}
