@@ -34,9 +34,9 @@ var cachePool = sync.Pool{
 // When variant is 1, data is required to have at least 43 bytes.
 // This is assumed and not checked by Sum. If this condition doesn't meet, Sum
 // will panic straightforward.
-func Sum(data []byte, variant int) []byte {
+func Sum(data []byte, variant int, height uint64) []byte {
 	cc := cachePool.Get().(*cache)
-	sum := cc.sum(data, variant)
+	sum := cc.sum(data, variant, height)
 	cachePool.Put(cc)
 
 	return sum
@@ -152,7 +152,7 @@ func TestSum(variant int) bool {
 	run := func(hashSpecs []hashSpec) bool {
 		for _, v := range hashSpecs {
 			in, _ := hex.DecodeString(v.input)
-			result := Sum(in, v.variant)
+			result := Sum(in, v.variant, 0)
 			if hex.EncodeToString(result) != v.output {
 				return false
 			}
@@ -162,7 +162,7 @@ func TestSum(variant int) bool {
 
 	runbin := func(hashSpecs []hashSpecBin) bool {
 		for _, v := range hashSpecs {
-			result := Sum(v.input[0:76], v.variant)
+			result := Sum(v.input[0:76], v.variant, 0)
 			for j, _ := range result {
 				if result[j] != v.output[j] {
 					return false

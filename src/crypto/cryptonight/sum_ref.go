@@ -6,7 +6,7 @@ import (
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/sha3"
 )
 
-func (cc *cache) sum(data []byte, variant int) []byte {
+func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -33,6 +33,14 @@ func (cc *cache) sum(data []byte, variant int) []byte {
 		v1Tweak = cc.finalState[24] ^ binary.LittleEndian.Uint64(data[35:43])
 	}
 
+	var r [9]uint32
+	if variant == 4 {
+		r[0] = uint32(cc.finalState[12])
+		r[1] = uint32(cc.finalState[12] >> 32)
+		r[2] = uint32(cc.finalState[13])
+		r[3] = uint32(cc.finalState[13] >> 32)
+	}
+
 	// scratchpad init
 	aes.CnExpandKeyGo(cc.finalState[:4], &cc.rkeys)
 	copy(cc.blocks[:], cc.finalState[8:24])
@@ -50,7 +58,7 @@ func (cc *cache) sum(data []byte, variant int) []byte {
 	a[1] = cc.finalState[1] ^ cc.finalState[5]
 	b[0] = cc.finalState[2] ^ cc.finalState[6]
 	b[1] = cc.finalState[3] ^ cc.finalState[7]
-	if variant == 2 {
+	if variant == 2 || variant == 4 {
 		e[0] = cc.finalState[8] ^ cc.finalState[10]
 		e[1] = cc.finalState[9] ^ cc.finalState[11]
 		divResult = cc.finalState[12]
@@ -61,7 +69,7 @@ func (cc *cache) sum(data []byte, variant int) []byte {
 		addr := (a[0] & 0x1ffff0) >> 3
 		aes.CnSingleRoundGo(c[:2], cc.scratchpad[addr:addr+2], &a)
 
-		if variant == 2 {
+		if variant == 2 || variant == 4 {
 			// since we use []uint64 instead of []uint8 as scratchpad, the offset applies too
 			offset0 := addr ^ 0x02
 			offset1 := addr ^ 0x04
@@ -95,7 +103,7 @@ func (cc *cache) sum(data []byte, variant int) []byte {
 		d[0] = cc.scratchpad[addr]
 		d[1] = cc.scratchpad[addr+1]
 
-		if variant == 2 {
+		if variant == 2 || variant == 4 {
 			// equivalent to VARIANT2_PORTABLE_INTEGER_MATH in slow-hash.c
 			// VARIANT2_INTEGER_MATH_DIVISION_STEP
 			d[0] ^= divResult ^ (sqrtResult << 32)
@@ -111,7 +119,7 @@ func (cc *cache) sum(data []byte, variant int) []byte {
 		// byteMul
 		lo, hi := mul128(c[0], d[0])
 
-		if variant == 2 {
+		if variant == 2 || variant == 4 {
 			// shuffle again, it's the same process as above
 			offset0 := addr ^ 0x02
 			offset1 := addr ^ 0x04
