@@ -148,7 +148,7 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 
 	code := make([]V4_Instruction, NUM_INSTRUCTIONS_MAX+1)
 
-	var data [32]int8
+	data := make([]int8, 32)
 	tmp := height
 	binary.LittleEndian.PutUint64(*(*[]byte)(unsafe.Pointer(&data)), tmp)
 	data[20] = -38 // change seed
@@ -202,7 +202,7 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 
 			check_data(&data_index, 1, (*[]byte)(unsafe.Pointer(&data)))
 
-			c := data[data_index]
+			c := uint8(data[data_index])
 			data_index++
 
 			// MUL = opcodes 0-2
@@ -210,7 +210,7 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 			// SUB = opcode 4
 			// ROR/ROL = opcode 5, shift direction is selected randomly
 			// XOR = opcodes 6-7
-			opcode := c & ((1 << V4_OPCODE_BITS) - 1)
+			opcode := uint8(c & ((1 << V4_OPCODE_BITS) - 1))
 			if opcode == 5 {
 				check_data(&data_index, 1, (*[]byte)(unsafe.Pointer(&data)))
 				if data[data_index] >= 0 {
@@ -229,11 +229,11 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 				}
 			}
 
-			dst_index := (c >> V4_OPCODE_BITS) & ((1 << V4_DST_INDEX_BITS) - 1)
-			src_index := (c >> (V4_OPCODE_BITS + V4_DST_INDEX_BITS)) & ((1 << V4_SRC_INDEX_BITS) - 1)
+			dst_index := uint8((c >> V4_OPCODE_BITS) & ((1 << V4_DST_INDEX_BITS) - 1))
+			src_index := uint8((c >> (V4_OPCODE_BITS + V4_DST_INDEX_BITS)) & ((1 << V4_SRC_INDEX_BITS) - 1))
 
-			a := dst_index
-			b := src_index
+			a := int(dst_index)
+			b := int(src_index)
 
 			// Don't do ADD/SUB/XOR with the same register
 			if ((opcode == ADD) || (opcode == SUB) || (opcode == XOR)) && (a == b) {
