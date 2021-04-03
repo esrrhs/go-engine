@@ -11,7 +11,10 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 	// these variables never escape to heap
 	var (
 		// used in memory hard
-		a, b, c, d [2]uint64
+		a [2]uint64
+		b [2]uint64
+		c [2]uint64
+		d [2]uint64
 
 		// for variant 1
 		v1Tweak uint64
@@ -34,11 +37,13 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 	}
 
 	var r [9]uint32
+	var rcode []V4_Instruction
 	if variant == 4 {
 		r[0] = uint32(cc.finalState[12])
 		r[1] = uint32(cc.finalState[12] >> 32)
 		r[2] = uint32(cc.finalState[13])
 		r[3] = uint32(cc.finalState[13] >> 32)
+		rcode = v4_random_math_init(height)
 	}
 
 	// scratchpad init
@@ -114,6 +119,18 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			// VARIANT2_INTEGER_MATH_SQRT_STEP_FP64 and
 			// VARIANT2_INTEGER_MATH_SQRT_FIXUP
 			sqrtResult = v2Sqrt(sqrtInput)
+
+			if variant == 4 {
+				d[0] ^= uint64(r[0]+r[1]) | (uint64(r[2]+r[3]) << 32)
+				r[4] = uint32(a[0])
+				r[5] = uint32(a[1])
+				r[6] = uint32(b[0])
+				r[7] = uint32(e[0])
+				r[8] = uint32(e[1])
+				v4_random_math(rcode, r[:])
+				a[0] ^= uint64(r[2]) | ((uint64)(r[3]) << 32)
+				a[1] ^= uint64(r[0]) | ((uint64)(r[1]) << 32)
+			}
 		}
 
 		// byteMul
