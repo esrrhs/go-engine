@@ -24,7 +24,7 @@ func Test0002(t *testing.T) {
 
 func Test0004(t *testing.T) {
 	if !TestSum(4) {
-		t.Error("TestSum fail 2")
+		t.Error("TestSum fail 4")
 	}
 }
 

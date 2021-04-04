@@ -143,7 +143,7 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 
 		} else if variant == 4 {
 			//loggo.Info("v4_random_math before r %v %v %v %v %v %v %v %v %v", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
-			loggo.Info("round before a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
+			//loggo.Info("round before a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
 			d[0] ^= uint64(r[0]+r[1]) | (uint64(r[2]+r[3]) << 32)
 			r[4] = uint32(a[0])
 			r[5] = uint32(a[1])
@@ -153,7 +153,8 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			v4_random_math(rcode[:], r[:])
 			a[0] ^= uint64(r[2]) | ((uint64)(r[3]) << 32)
 			a[1] ^= uint64(r[0]) | ((uint64)(r[1]) << 32)
-			loggo.Info("round end a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
+			//loggo.Info("round end a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
+			loggo.Info("round %d crc=%v", i, a[0]^a[1]^b[0]^b[1]^c[0]^c[1]^d[0]^d[1]^e[0]^e[1])
 		}
 
 		// byteMul
