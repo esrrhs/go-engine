@@ -3,6 +3,7 @@ package cryptonight
 import (
 	"encoding/binary"
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/blake256"
+	"github.com/esrrhs/go-engine/src/loggo"
 	"unsafe"
 )
 
@@ -144,14 +145,14 @@ func check_data(data_index *int, bytes_needed int, data *[]byte) {
 
 // Generates as many random math operations as possible with given latency and ALU restrictions
 // "code" array must have space for NUM_INSTRUCTIONS_MAX+1 instructions
-func v4_random_math_init(height uint64) []V4_Instruction {
-
-	code := make([]V4_Instruction, NUM_INSTRUCTIONS_MAX+1)
+func v4_random_math_init(code []V4_Instruction, height uint64) {
 
 	data := make([]int8, 32)
 	tmp := height
 	binary.LittleEndian.PutUint64(*(*[]byte)(unsafe.Pointer(&data)), tmp)
 	data[20] = -38 // change seed
+
+	loggo.Info("before data %d %d %d %d %d %d %d %d", data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
 
 	// Set data_index past the last byte in data
 	// to trigger full data update with blake hash
@@ -205,6 +206,8 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 			c := uint8(data[data_index])
 			data_index++
 
+			loggo.Info("run c %d %d %d", data_index, total_iterations, c)
+
 			// MUL = opcodes 0-2
 			// ADD = opcode 3
 			// SUB = opcode 4
@@ -229,8 +232,8 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 				}
 			}
 
-			dst_index := uint8((c >> V4_OPCODE_BITS) & ((1 << V4_DST_INDEX_BITS) - 1))
-			src_index := uint8((c >> (V4_OPCODE_BITS + V4_DST_INDEX_BITS)) & ((1 << V4_SRC_INDEX_BITS) - 1))
+			dst_index := (c >> V4_OPCODE_BITS) & ((1 << V4_DST_INDEX_BITS) - 1)
+			src_index := (c >> (V4_OPCODE_BITS + V4_DST_INDEX_BITS)) & ((1 << V4_SRC_INDEX_BITS) - 1)
 
 			a := int(dst_index)
 			b := int(src_index)
@@ -250,7 +253,11 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 			// Don't do the same instruction (except MUL) with the same source value twice because all other cases can be optimized:
 			// 2xADD(a, b, C) = ADD(a, b*2, C1+C2), same for SUB and rotations
 			// 2xXOR(a, b) = NOP
-			if (opcode != MUL) && ((inst_data[a] & 0xFFFF00) == uint32(opcode<<8)+((inst_data[b]&255)<<16)) {
+			left := inst_data[a] & 0xFFFF00
+			right1 := uint32(opcode) << 8
+			right2 := (inst_data[b] & 255) << 16
+			if (opcode != MUL) && (left == right1+right2) {
+				loggo.Info("run c continue %d %d %d %v %v %v %v", data_index, total_iterations, c, a, b, inst_data[a], inst_data[b])
 				continue
 			}
 
@@ -304,14 +311,15 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 
 				// ASIC is supposed to have enough ALUs to run as many independent instructions per cycle as possible, so latency calculation for ASIC is simple
 				if asic_latency[a] > asic_latency[b] {
-					asic_latency[a] = asic_latency[a]
+					asic_latency[a] = asic_latency[a] + asic_op_latency[opcode]
 				} else {
 					asic_latency[a] = asic_latency[b] + asic_op_latency[opcode]
 				}
+				loggo.Info("run c latency step %d %d %d %d %d %d, %d %d %d %d %d %d %d %d %d", data_index, total_iterations, c, opcode, a, b, asic_latency[0], asic_latency[1], asic_latency[2], asic_latency[3], asic_latency[4], asic_latency[5], asic_latency[6], asic_latency[7], asic_latency[8])
 
 				rotated[a] = is_rotation[opcode]
 
-				inst_data[a] = uint32(code_size) + uint32(opcode<<8) + ((inst_data[b] & 255) << 16)
+				inst_data[a] = uint32(code_size) + (uint32(opcode) << 8) + ((inst_data[b] & 255) << 16)
 
 				code[code_size].opcode = uint8(opcode)
 				code[code_size].dst_index = uint8(dst_index)
@@ -341,6 +349,8 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 				num_retries++
 			}
 		}
+
+		loggo.Info("run c latency %d %d %d %d %d %d %d %d %d", asic_latency[0], asic_latency[1], asic_latency[2], asic_latency[3], asic_latency[4], asic_latency[5], asic_latency[6], asic_latency[7], asic_latency[8])
 
 		// ASIC has more execution resources and can extract as much parallelism from the code as possible
 		// We need to add a few more MUL and ROR instructions to achieve minimal required latency for ASIC
@@ -372,7 +382,7 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 
 		// There is ~98.15% chance that loop condition is false, so this loop will execute only 1 iteration most of the time
 		// It never does more than 4 iterations for all block heights < 10,000,000
-		if !r8_used || (code_size < NUM_INSTRUCTIONS_MIN) || (code_size > NUM_INSTRUCTIONS_MAX) {
+		if !(!r8_used || (code_size < NUM_INSTRUCTIONS_MIN) || (code_size > NUM_INSTRUCTIONS_MAX)) {
 			break
 		}
 	}
@@ -383,6 +393,4 @@ func v4_random_math_init(height uint64) []V4_Instruction {
 	code[code_size].dst_index = 0
 	code[code_size].src_index = 0
 	code[code_size].C = 0
-
-	return code
 }

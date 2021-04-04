@@ -4,14 +4,26 @@ import (
 	"testing"
 )
 
-func Test0001(t *testing.T) {
+func Test0000(t *testing.T) {
 	if !TestSum(0) {
 		t.Error("TestSum fail 0")
 	}
+}
+
+func Test0001(t *testing.T) {
 	if !TestSum(1) {
 		t.Error("TestSum fail 1")
 	}
+}
+
+func Test0002(t *testing.T) {
 	if !TestSum(2) {
+		t.Error("TestSum fail 2")
+	}
+}
+
+func Test0004(t *testing.T) {
+	if !TestSum(4) {
 		t.Error("TestSum fail 2")
 	}
 }

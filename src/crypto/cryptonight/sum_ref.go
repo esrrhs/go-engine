@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/aes"
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/sha3"
+	"github.com/esrrhs/go-engine/src/loggo"
 )
 
 func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
@@ -37,13 +38,25 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 	}
 
 	var r [9]uint32
-	var rcode []V4_Instruction
+	var rcode [NUM_INSTRUCTIONS_MAX + 1]V4_Instruction
 	if variant == 4 {
 		r[0] = uint32(cc.finalState[12])
 		r[1] = uint32(cc.finalState[12] >> 32)
 		r[2] = uint32(cc.finalState[13])
 		r[3] = uint32(cc.finalState[13] >> 32)
-		rcode = v4_random_math_init(height)
+		v4_random_math_init(rcode[:], height)
+		var test_opcode uint32
+		var test_srcindex uint32
+		var test_dst_index uint32
+		var test_code uint32
+		for index, code := range rcode {
+			loggo.Info("before rcode %v %v %v %v %v", index, code.opcode, code.dst_index, code.src_index, code.C)
+			test_opcode += uint32(code.opcode)
+			test_dst_index += uint32(code.dst_index)
+			test_srcindex += uint32(code.src_index)
+			test_code ^= code.C
+		}
+		loggo.Info("before rcode sum %v %v %v %v", test_opcode, test_srcindex, test_dst_index, test_code)
 	}
 
 	// scratchpad init
@@ -69,6 +82,8 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		divResult = cc.finalState[12]
 		sqrtResult = cc.finalState[13]
 	}
+
+	loggo.Info("before r %v %v %v %v %v %v %v %v %v", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
 
 	for i := 0; i < 524288; i++ {
 		addr := (a[0] & 0x1ffff0) >> 3
@@ -121,13 +136,13 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			sqrtResult = v2Sqrt(sqrtInput)
 
 			if variant == 4 {
-				d[0] ^= uint64(r[0]+r[1]) | (uint64(r[2]+r[3]) << 32)
+				b[0] ^= uint64(r[0]+r[1]) | (uint64(r[2]+r[3]) << 32)
 				r[4] = uint32(a[0])
 				r[5] = uint32(a[1])
 				r[6] = uint32(b[0])
 				r[7] = uint32(e[0])
 				r[8] = uint32(e[1])
-				v4_random_math(rcode, r[:])
+				v4_random_math(rcode[:], r[:])
 				a[0] ^= uint64(r[2]) | ((uint64)(r[3]) << 32)
 				a[1] ^= uint64(r[0]) | ((uint64)(r[1]) << 32)
 			}
@@ -180,6 +195,9 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 
 		a[0] ^= d[0]
 		a[1] ^= d[1]
+
+		e[0] = b[0]
+		e[1] = b[1]
 
 		b[0] = c[0]
 		b[1] = c[1]
