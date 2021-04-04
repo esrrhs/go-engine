@@ -127,7 +127,7 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		addr = (c[0] & 0x1ffff0) >> 3
 		d[0] = cc.scratchpad[addr]
 		d[1] = cc.scratchpad[addr+1]
-		//loggo.Info("round addr c[0]=%v addr=%v d0=%v d1=%v", c[0], addr*8, d[0], d[1])
+		//("round addr c[0]=%v addr=%v d0=%v d1=%v", c[0], addr*8, d[0], d[1])
 
 		if variant == 2 {
 			// equivalent to VARIANT2_PORTABLE_INTEGER_MATH in slow-hash.c
@@ -154,7 +154,7 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			a[0] ^= uint64(r[2]) | ((uint64)(r[3]) << 32)
 			a[1] ^= uint64(r[0]) | ((uint64)(r[1]) << 32)
 			//loggo.Info("round end a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
-			loggo.Info("round %d crc=%v", i, a[0]^a[1]^b[0]^b[1]^c[0]^c[1]^d[0]^d[1]^e[0]^e[1])
+			//loggo.Info("round %d crc=%v", i, a[0]^a[1]^b[0]^b[1]^c[0]^c[1]^d[0]^d[1]^e[0]^e[1])
 		}
 
 		// byteMul
@@ -201,12 +201,12 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		cc.scratchpad[addr+0] = a[0]
 		cc.scratchpad[addr+1] = a[1]
 
+		a[0] ^= d[0]
+		a[1] ^= d[1]
+
 		if variant == 1 {
 			cc.scratchpad[addr+1] ^= v1Tweak
 		}
-
-		a[0] ^= d[0]
-		a[1] ^= d[1]
 
 		e[0] = b[0]
 		e[1] = b[1]
