@@ -108,6 +108,11 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			cc.scratchpad[offset2+1] = chunk1_1 + a[1]
 			cc.scratchpad[offset1+0] = chunk0_0 + b[0]
 			cc.scratchpad[offset1+1] = chunk0_1 + b[1]
+
+			if variant == 4 {
+				c[0] = (c[0] ^ chunk2_0) ^ (chunk0_0 ^ chunk1_0)
+				c[1] = (c[1] ^ chunk2_1) ^ (chunk0_1 ^ chunk1_1)
+			}
 		}
 
 		cc.scratchpad[addr+0] = b[0] ^ c[0]
@@ -122,8 +127,9 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		addr = (c[0] & 0x1ffff0) >> 3
 		d[0] = cc.scratchpad[addr]
 		d[1] = cc.scratchpad[addr+1]
+		//loggo.Info("round addr c[0]=%v addr=%v d0=%v d1=%v", c[0], addr*8, d[0], d[1])
 
-		if variant == 2 || variant == 4 {
+		if variant == 2 {
 			// equivalent to VARIANT2_PORTABLE_INTEGER_MATH in slow-hash.c
 			// VARIANT2_INTEGER_MATH_DIVISION_STEP
 			d[0] ^= divResult ^ (sqrtResult << 32)
@@ -135,17 +141,19 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			// VARIANT2_INTEGER_MATH_SQRT_FIXUP
 			sqrtResult = v2Sqrt(sqrtInput)
 
-			if variant == 4 {
-				b[0] ^= uint64(r[0]+r[1]) | (uint64(r[2]+r[3]) << 32)
-				r[4] = uint32(a[0])
-				r[5] = uint32(a[1])
-				r[6] = uint32(b[0])
-				r[7] = uint32(e[0])
-				r[8] = uint32(e[1])
-				v4_random_math(rcode[:], r[:])
-				a[0] ^= uint64(r[2]) | ((uint64)(r[3]) << 32)
-				a[1] ^= uint64(r[0]) | ((uint64)(r[1]) << 32)
-			}
+		} else if variant == 4 {
+			//loggo.Info("v4_random_math before r %v %v %v %v %v %v %v %v %v", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
+			loggo.Info("round before a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
+			d[0] ^= uint64(r[0]+r[1]) | (uint64(r[2]+r[3]) << 32)
+			r[4] = uint32(a[0])
+			r[5] = uint32(a[1])
+			r[6] = uint32(b[0])
+			r[7] = uint32(e[0])
+			r[8] = uint32(e[1])
+			v4_random_math(rcode[:], r[:])
+			a[0] ^= uint64(r[2]) | ((uint64)(r[3]) << 32)
+			a[1] ^= uint64(r[0]) | ((uint64)(r[1]) << 32)
+			loggo.Info("round end a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
 		}
 
 		// byteMul
@@ -164,11 +172,13 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			chunk2_0 := cc.scratchpad[offset2+0]
 			chunk2_1 := cc.scratchpad[offset2+1]
 
-			// VARIANT2_2
-			chunk0_0 ^= hi
-			chunk0_1 ^= lo
-			hi ^= chunk1_0
-			lo ^= chunk1_1
+			if variant == 2 {
+				// VARIANT2_2
+				chunk0_0 ^= hi
+				chunk0_1 ^= lo
+				hi ^= chunk1_0
+				lo ^= chunk1_1
+			}
 
 			cc.scratchpad[offset0+0] = chunk2_0 + e[0]
 			cc.scratchpad[offset0+1] = chunk2_1 + e[1]
@@ -177,9 +187,10 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			cc.scratchpad[offset1+0] = chunk0_0 + b[0]
 			cc.scratchpad[offset1+1] = chunk0_1 + b[1]
 
-			// re-asign higher-order of b
-			e[0] = b[0]
-			e[1] = b[1]
+			if variant == 4 {
+				c[0] = (c[0] ^ chunk2_0) ^ (chunk0_0 ^ chunk1_0)
+				c[1] = (c[1] ^ chunk2_1) ^ (chunk0_1 ^ chunk1_1)
+			}
 		}
 
 		// byteAdd
@@ -202,6 +213,8 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		b[0] = c[0]
 		b[1] = c[1]
 	}
+
+	loggo.Info("end loop round a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
 
 	//////////////////////////////////////////////////
 	// as per CNS008 sec.5 Result Calculation

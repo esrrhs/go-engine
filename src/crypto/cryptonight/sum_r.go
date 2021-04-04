@@ -67,7 +67,7 @@ var asic_op_latency = [V4_INSTRUCTION_COUNT]int{3, 1, 1, 1, 1, 1}
 // Available ALUs for each instruction
 var op_ALUs = [V4_INSTRUCTION_COUNT]int{ALU_COUNT_MUL, ALU_COUNT, ALU_COUNT, ALU_COUNT, ALU_COUNT, ALU_COUNT}
 
-func v4_exec(code []V4_Instruction, r []uint32, i int) {
+func v4_exec(code []V4_Instruction, r []uint32, i int) bool {
 	op := code[i]
 	src := r[op.src_index]
 	dst := &r[op.dst_index]
@@ -87,23 +87,13 @@ func v4_exec(code []V4_Instruction, r []uint32, i int) {
 	case XOR:
 		*dst ^= src
 	case RET:
+		return false
 	default:
 		panic("UNREACHABLE_CODE")
 		break
 	}
-}
 
-func v4_exec_10(code []V4_Instruction, r []uint32, j int) {
-	v4_exec(code, r, j+0)
-	v4_exec(code, r, j+1)
-	v4_exec(code, r, j+2)
-	v4_exec(code, r, j+3)
-	v4_exec(code, r, j+4)
-	v4_exec(code, r, j+5)
-	v4_exec(code, r, j+6)
-	v4_exec(code, r, j+7)
-	v4_exec(code, r, j+8)
-	v4_exec(code, r, j+9)
+	return true
 }
 
 // Random math interpreter's loop is fully unrolled and inlined to achieve 100% branch prediction on CPU:
@@ -125,14 +115,16 @@ func v4_random_math(code []V4_Instruction, r []uint32) {
 	// 68      4529
 	// 69      102
 
+	//loggo.Info("v4_random_math before r %v %v %v %v %v %v %v %v %v", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
+
 	// Unroll 70 instructions here
-	v4_exec_10(code, r, 0)  // instructions 0-9
-	v4_exec_10(code, r, 10) // instructions 10-19
-	v4_exec_10(code, r, 20) // instructions 20-29
-	v4_exec_10(code, r, 30) // instructions 30-39
-	v4_exec_10(code, r, 40) // instructions 40-49
-	v4_exec_10(code, r, 50) // instructions 50-59
-	v4_exec_10(code, r, 60) // instructions 60-69
+	for i := 0; i < NUM_INSTRUCTIONS_MAX; i++ {
+		if !v4_exec(code, r, i) {
+			break
+		}
+	}
+
+	//loggo.Info("v4_random_math end r %v %v %v %v %v %v %v %v %v", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
 }
 
 func check_data(data_index *int, bytes_needed int, data *[]byte) {
