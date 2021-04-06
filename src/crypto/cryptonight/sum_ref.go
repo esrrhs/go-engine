@@ -608,12 +608,6 @@ func (cc *cache) sum4(data []byte, height uint64) []byte {
 		e [2]uint64
 	)
 
-	//var datacrc byte
-	//for _, u := range data {
-	//	datacrc ^= u
-	//}
-	//loggo.Info("start input %v", datacrc)
-
 	//////////////////////////////////////////////////
 	// as per CNS008 sec.3 Scratchpad Initialization
 	sha3.Keccak1600State(&cc.finalState, data)
@@ -636,12 +630,6 @@ func (cc *cache) sum4(data []byte, height uint64) []byte {
 		}
 		copy(cc.scratchpad[i:i+16], cc.blocks[:16])
 	}
-
-	//var crc uint64
-	//for _, u := range cc.scratchpad {
-	//	crc ^= u
-	//}
-	//loggo.Info("start Keccak1600State %v", crc)
 
 	//////////////////////////////////////////////////
 	// as per CNS008 sec.4 Memory-Hard Loop
@@ -689,8 +677,6 @@ func (cc *cache) sum4(data []byte, height uint64) []byte {
 		d[1] = cc.scratchpad[addr+1]
 		//("round addr c[0]=%v addr=%v d0=%v d1=%v", c[0], addr*8, d[0], d[1])
 
-		//loggo.Info("v4_random_math before r %v %v %v %v %v %v %v %v %v", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
-		//loggo.Info("round before a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
 		d[0] ^= uint64(r[0]+r[1]) | (uint64(r[2]+r[3]) << 32)
 		r[4] = uint32(a[0])
 		r[5] = uint32(a[1])
@@ -700,7 +686,6 @@ func (cc *cache) sum4(data []byte, height uint64) []byte {
 		v4_random_math(rcode[:], r[:])
 		a[0] ^= uint64(r[2]) | ((uint64)(r[3]) << 32)
 		a[1] ^= uint64(r[0]) | ((uint64)(r[1]) << 32)
-		//loggo.Info("round end a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
 
 		// byteMul
 		lo, hi := mul128(c[0], d[0])
