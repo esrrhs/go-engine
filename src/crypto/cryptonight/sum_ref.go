@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/aes"
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/sha3"
-	"github.com/esrrhs/go-engine/src/loggo"
 )
 
 func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
@@ -12,10 +11,11 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 	// these variables never escape to heap
 	var (
 		// used in memory hard
-		a [2]uint64
-		b [2]uint64
-		c [2]uint64
-		d [2]uint64
+		a  [2]uint64
+		b  [2]uint64
+		c  [2]uint64
+		d  [2]uint64
+		_a [2]uint64
 
 		// for variant 1
 		v1Tweak uint64
@@ -25,6 +25,12 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		divResult  uint64
 		sqrtResult uint64
 	)
+
+	//var datacrc byte
+	//for _, u := range data {
+	//	datacrc ^= u
+	//}
+	//loggo.Info("start input %v", datacrc)
 
 	//////////////////////////////////////////////////
 	// as per CNS008 sec.3 Scratchpad Initialization
@@ -45,18 +51,18 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		r[2] = uint32(cc.finalState[13])
 		r[3] = uint32(cc.finalState[13] >> 32)
 		v4_random_math_init(rcode[:], height)
-		var test_opcode uint32
-		var test_srcindex uint32
-		var test_dst_index uint32
-		var test_code uint32
-		for index, code := range rcode {
-			loggo.Info("before rcode %v %v %v %v %v", index, code.opcode, code.dst_index, code.src_index, code.C)
-			test_opcode += uint32(code.opcode)
-			test_dst_index += uint32(code.dst_index)
-			test_srcindex += uint32(code.src_index)
-			test_code ^= code.C
-		}
-		loggo.Info("before rcode sum %v %v %v %v", test_opcode, test_srcindex, test_dst_index, test_code)
+		//var test_opcode uint32
+		//var test_srcindex uint32
+		//var test_dst_index uint32
+		//var test_code uint32
+		//for index, code := range rcode {
+		//	loggo.Info("before rcode %v %v %v %v %v", index, code.opcode, code.dst_index, code.src_index, code.C)
+		//	test_opcode += uint32(code.opcode)
+		//	test_dst_index += uint32(code.dst_index)
+		//	test_srcindex += uint32(code.src_index)
+		//	test_code ^= code.C
+		//}
+		//loggo.Info("before rcode sum %v %v %v %v", test_opcode, test_srcindex, test_dst_index, test_code)
 	}
 
 	// scratchpad init
@@ -69,6 +75,12 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		}
 		copy(cc.scratchpad[i:i+16], cc.blocks[:16])
 	}
+
+	//var crc uint64
+	//for _, u := range cc.scratchpad {
+	//	crc ^= u
+	//}
+	//loggo.Info("start Keccak1600State %v", crc)
 
 	//////////////////////////////////////////////////
 	// as per CNS008 sec.4 Memory-Hard Loop
@@ -83,9 +95,12 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 		sqrtResult = cc.finalState[13]
 	}
 
-	loggo.Info("before r %v %v %v %v %v %v %v %v %v", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
+	//loggo.Info("before r %v %v %v %v %v %v %v %v %v", r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8])
 
 	for i := 0; i < 524288; i++ {
+		_a[0] = a[0]
+		_a[1] = a[1]
+
 		addr := (a[0] & 0x1ffff0) >> 3
 		aes.CnSingleRoundGo(c[:2], cc.scratchpad[addr:addr+2], &a)
 
@@ -104,8 +119,8 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 
 			cc.scratchpad[offset0+0] = chunk2_0 + e[0]
 			cc.scratchpad[offset0+1] = chunk2_1 + e[1]
-			cc.scratchpad[offset2+0] = chunk1_0 + a[0]
-			cc.scratchpad[offset2+1] = chunk1_1 + a[1]
+			cc.scratchpad[offset2+0] = chunk1_0 + _a[0]
+			cc.scratchpad[offset2+1] = chunk1_1 + _a[1]
 			cc.scratchpad[offset1+0] = chunk0_0 + b[0]
 			cc.scratchpad[offset1+1] = chunk0_1 + b[1]
 
@@ -113,10 +128,15 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 				c[0] = (c[0] ^ chunk2_0) ^ (chunk0_0 ^ chunk1_0)
 				c[1] = (c[1] ^ chunk2_1) ^ (chunk0_1 ^ chunk1_1)
 			}
+
+			//loggo.Info("change scratchpad %v %v %v to %v,%v %v,%v %v,%v", offset0*8, offset1*8, offset2*8,
+			//	cc.scratchpad[offset0+0], cc.scratchpad[offset0+1], cc.scratchpad[offset1+0], cc.scratchpad[offset1+1], cc.scratchpad[offset2+0], cc.scratchpad[offset2+1])
+			//loggo.Info("change scratchpad1 %v,%v %v,%v", chunk1_0, chunk1_1, _a[0], _a[1])
 		}
 
 		cc.scratchpad[addr+0] = b[0] ^ c[0]
 		cc.scratchpad[addr+1] = b[1] ^ c[1]
+		//loggo.Info("change scratchpad %v to %v,%v", addr*8, cc.scratchpad[addr+0], cc.scratchpad[addr+1])
 
 		if variant == 1 {
 			t := cc.scratchpad[addr+1] >> 24
@@ -154,7 +174,6 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 			a[0] ^= uint64(r[2]) | ((uint64)(r[3]) << 32)
 			a[1] ^= uint64(r[0]) | ((uint64)(r[1]) << 32)
 			//loggo.Info("round end a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
-			//loggo.Info("round %d crc=%v", i, a[0]^a[1]^b[0]^b[1]^c[0]^c[1]^d[0]^d[1]^e[0]^e[1])
 		}
 
 		// byteMul
@@ -183,10 +202,14 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 
 			cc.scratchpad[offset0+0] = chunk2_0 + e[0]
 			cc.scratchpad[offset0+1] = chunk2_1 + e[1]
-			cc.scratchpad[offset2+0] = chunk1_0 + a[0]
-			cc.scratchpad[offset2+1] = chunk1_1 + a[1]
+			cc.scratchpad[offset2+0] = chunk1_0 + _a[0]
+			cc.scratchpad[offset2+1] = chunk1_1 + _a[1]
 			cc.scratchpad[offset1+0] = chunk0_0 + b[0]
 			cc.scratchpad[offset1+1] = chunk0_1 + b[1]
+
+			//loggo.Info("change scratchpad %v %v %v to %v,%v %v,%v %v,%v", offset0*8, offset1*8, offset2*8,
+			//	cc.scratchpad[offset0+0], cc.scratchpad[offset0+1], cc.scratchpad[offset1+0], cc.scratchpad[offset1+1], cc.scratchpad[offset2+0], cc.scratchpad[offset2+1])
+			//loggo.Info("change scratchpad1 %v,%v %v,%v", chunk1_0, chunk1_1, _a[0], _a[1])
 
 			if variant == 4 {
 				c[0] = (c[0] ^ chunk2_0) ^ (chunk0_0 ^ chunk1_0)
@@ -200,6 +223,7 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 
 		cc.scratchpad[addr+0] = a[0]
 		cc.scratchpad[addr+1] = a[1]
+		//loggo.Info("change scratchpad %v to %v,%v", addr*8, cc.scratchpad[addr+0], cc.scratchpad[addr+1])
 
 		a[0] ^= d[0]
 		a[1] ^= d[1]
@@ -213,9 +237,15 @@ func (cc *cache) sum(data []byte, variant int, height uint64) []byte {
 
 		b[0] = c[0]
 		b[1] = c[1]
+
+		//var crc uint64
+		//for _, u := range cc.scratchpad {
+		//	crc ^= u
+		//}
+		//loggo.Info("round %d regcrc=%v crc=%v", i, a[0]^a[1]^b[0]^b[1]^c[0]^c[1]^d[0]^d[1]^e[0]^e[1], crc)
 	}
 
-	loggo.Info("end loop round a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
+	//loggo.Info("end loop round a0=%v a1=%v b0=%v b1=%v c0=%v c1=%v d0=%v d1=%v e0=%v e1=%v", a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1], e[0], e[1])
 
 	//////////////////////////////////////////////////
 	// as per CNS008 sec.5 Result Calculation
