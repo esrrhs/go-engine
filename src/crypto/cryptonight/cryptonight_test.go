@@ -28,6 +28,12 @@ func Test0004(t *testing.T) {
 	}
 }
 
+func Test0005(t *testing.T) {
+	if !TestSum(5) {
+		t.Error("TestSum fail 5")
+	}
+}
+
 // Here we don't make a seperate template function, as we want the function address
 // to be known at link time so the result can be more accurate.
 func BenchmarkSum(b *testing.B) {

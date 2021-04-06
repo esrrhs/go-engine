@@ -12,6 +12,8 @@ func Sum(data []byte, algo string, height uint64) []byte {
 		return cryptonight.Sum(data, 2, height)
 	case "cn/r":
 		return cryptonight.Sum(data, 4, height)
+	case "cn/fast":
+		return cryptonight.Sum(data, 5, height)
 	}
 	return nil
 }
@@ -26,6 +28,8 @@ func TestSum(algo string) bool {
 		return cryptonight.TestSum(2)
 	case "cn/r":
 		return cryptonight.TestSum(4)
+	case "cn/fast":
+		return cryptonight.TestSum(5)
 	}
 	return false
 }
