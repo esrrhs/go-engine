@@ -37,7 +37,19 @@ var cachePool = sync.Pool{
 // will panic straightforward.
 func Sum(data []byte, variant int, height uint64) []byte {
 	cc := cachePool.Get().(*cache)
-	sum := cc.sum(data, variant, height)
+	var sum []byte
+	switch variant {
+	case 0:
+		sum = cc.sum0(data)
+	case 1:
+		sum = cc.sum1(data)
+	case 2:
+		sum = cc.sum2(data)
+	case 4:
+		sum = cc.sum4(data, height)
+	default:
+		return nil
+	}
 	cachePool.Put(cc)
 
 	return sum
