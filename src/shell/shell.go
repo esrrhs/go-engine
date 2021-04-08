@@ -152,7 +152,7 @@ func RunExeTimeout(exe string, silent bool, timeout int, param ...string) (strin
 	return outstr, nil
 }
 
-func RunExeRaw(exe string, silent bool, param ...string) (string, error) {
+func RunExeRaw(exe string, silent bool, param ...string) string {
 
 	exe = filepath.Clean(exe)
 	exe = filepath.ToSlash(exe)
@@ -171,5 +171,5 @@ func RunExeRaw(exe string, silent bool, param ...string) (string, error) {
 		loggo.Info("%v", outstr)
 	}
 
-	return outstr, nil
+	return outstr
 }
