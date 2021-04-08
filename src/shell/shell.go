@@ -151,3 +151,25 @@ func RunExeTimeout(exe string, silent bool, timeout int, param ...string) (strin
 
 	return outstr, nil
 }
+
+func RunExeRaw(exe string, silent bool, param ...string) (string, error) {
+
+	exe = filepath.Clean(exe)
+	exe = filepath.ToSlash(exe)
+
+	if !silent {
+		loggo.Info("shell Run start %v %v ", exe, fmt.Sprint(param))
+	}
+
+	begin := time.Now()
+	cmd := exec.Command(exe, param...)
+	out, _ := cmd.CombinedOutput()
+	outstr := string(out)
+
+	if !silent {
+		loggo.Info("shell Run ok %v %v", cmd.Args, time.Now().Sub(begin))
+		loggo.Info("%v", outstr)
+	}
+
+	return outstr, nil
+}
