@@ -25,7 +25,7 @@ golang的通用开发库
 * shell
 * 系统监控
 #### 算法
-* 挖矿算法（cn/0，cn/1，cn/2，cn/r，cn/fast，cn/half，cn/xao）
+* 挖矿算法（cn/0，cn/1，cn/2，cn/r，cn/fast，cn/half，cn/xao，cn/rto）
 * 可靠帧控制
 * 拥塞控制
 * 德州扑克
