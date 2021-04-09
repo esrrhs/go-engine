@@ -5,49 +5,55 @@ import (
 )
 
 func Test0000(t *testing.T) {
-	if !TestSum(0) {
-		t.Error("TestSum fail 0")
+	if !TestSum("cn/0") {
+		t.Error("TestSum fail")
 	}
 }
 
 func Test0001(t *testing.T) {
-	if !TestSum(1) {
-		t.Error("TestSum fail 1")
+	if !TestSum("cn/1") {
+		t.Error("TestSum fail")
 	}
 }
 
 func Test0002(t *testing.T) {
-	if !TestSum(2) {
-		t.Error("TestSum fail 2")
+	if !TestSum("cn/2") {
+		t.Error("TestSum fail")
 	}
 }
 
 func Test0004(t *testing.T) {
-	if !TestSum(4) {
-		t.Error("TestSum fail 4")
+	if !TestSum("cn/r") {
+		t.Error("TestSum fail")
 	}
 }
 
 func Test0005(t *testing.T) {
-	if !TestSum(5) {
-		t.Error("TestSum fail 5")
+	if !TestSum("cn/fast") {
+		t.Error("TestSum fail")
 	}
 }
 
 func Test0006(t *testing.T) {
-	if !TestSum(6) {
-		t.Error("TestSum fail 6")
+	if !TestSum("cn/half") {
+		t.Error("TestSum fail")
 	}
 }
 
 func Test0007(t *testing.T) {
-	if !TestSum(7) {
-		t.Error("TestSum fail 7")
+	if !TestSum("cn/xao") {
+		t.Error("TestSum fail")
 	}
 }
 
 func Test0008(t *testing.T) {
-	if !TestSum(8) {
-		t.Error("TestSum fail 7")
+	if !TestSum("cn/rto") {
+		t.Error("TestSum fail")
+	}
+}
+
+func Test0009(t *testing.T) {
+	if !TestSum("cn/rwz") {
+		t.Error("TestSum fail")
 	}
 }
