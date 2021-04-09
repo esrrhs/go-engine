@@ -693,7 +693,7 @@ func (cc *cache) sum2half(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum4(data []byte, height uint64) []byte {
+func (cc *cache) sumr(data []byte, height uint64) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
