@@ -1,11 +1,14 @@
 package crypto
 
 import (
+	"fmt"
+	"github.com/esrrhs/go-engine/src/crypto/cryptonight"
 	"testing"
 )
 
 func Test0001(t *testing.T) {
-	algos := []string{"cn/0", "cn/1", "cn/2", "cn/r", "cn/fast", "cn/half", "cn/xao", "cn/rto", "cn/rwz"}
+	algos := cryptonight.Algo()
+	fmt.Println(algos)
 	for _, algo := range algos {
 		if !TestSum(algo) {
 			t.Error("TestSum fail " + algo)

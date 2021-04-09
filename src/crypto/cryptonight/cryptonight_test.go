@@ -57,3 +57,15 @@ func Test0009(t *testing.T) {
 		t.Error("TestSum fail")
 	}
 }
+
+func Test00010(t *testing.T) {
+	if !TestSum("cn/zls") {
+		t.Error("TestSum fail")
+	}
+}
+
+func Test00011(t *testing.T) {
+	if !TestSum("cn/double") {
+		t.Error("TestSum fail")
+	}
+}
