@@ -69,3 +69,9 @@ func Test00011(t *testing.T) {
 		t.Error("TestSum fail")
 	}
 }
+
+func Test00012(t *testing.T) {
+	if !TestSum("cn-lite/0") {
+		t.Error("TestSum fail")
+	}
+}
