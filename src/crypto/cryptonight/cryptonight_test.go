@@ -105,3 +105,9 @@ func Test00017(t *testing.T) {
 		t.Error("TestSum fail")
 	}
 }
+
+func Test00018(t *testing.T) {
+	if !TestSum("cn-pico/tlo") {
+		t.Error("TestSum fail")
+	}
+}
