@@ -65,6 +65,34 @@ func CnSingleRoundGo(dst, src []uint64, rkey *[2]uint64) {
 	dst8[12], dst8[13], dst8[14], dst8[15] = byte(t3), byte(t3>>8), byte(t3>>16), byte(t3>>24)
 }
 
+func CnSingleRoundHeavyGo(dst, src []uint64, rkey *[2]uint64) {
+	dst[0] = src[0]
+	dst[1] = src[1]
+
+	var x [2]uint64
+	var k [2]uint64
+	k[0] = rkey[0]
+	k[1] = rkey[1]
+
+	x[0] = dst[0] ^ 0xffffffffffffffff
+	x[1] = dst[1] ^ 0xffffffffffffffff
+
+	kk := (*[4]uint32)(unsafe.Pointer(&k[0]))
+	xx := (*[4]uint32)(unsafe.Pointer(&x[0]))
+	xxx := (*[16]byte)(unsafe.Pointer(&x[0]))
+
+	kk[0] ^= ter0[xxx[0*4+0]] ^ ter1[xxx[1*4+1]] ^ ter2[xxx[2*4+2]] ^ ter3[xxx[3*4+3]]
+	xx[0] ^= kk[0]
+	kk[1] ^= ter0[xxx[1*4+0]] ^ ter1[xxx[2*4+1]] ^ ter2[xxx[3*4+2]] ^ ter3[xxx[0*4+3]]
+	xx[1] ^= kk[1]
+	kk[2] ^= ter0[xxx[2*4+0]] ^ ter1[xxx[3*4+1]] ^ ter2[xxx[0*4+2]] ^ ter3[xxx[1*4+3]]
+	xx[2] ^= kk[2]
+	kk[3] ^= ter0[xxx[3*4+0]] ^ ter1[xxx[0*4+1]] ^ ter2[xxx[1*4+2]] ^ ter3[xxx[2*4+3]]
+
+	dst[0] = k[0]
+	dst[1] = k[1]
+}
+
 // Apply sbox0 to each byte in w.
 func subw(w uint32) uint32 {
 	return uint32(sbox0[w>>24])<<24 |

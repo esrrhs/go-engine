@@ -87,3 +87,9 @@ func Test00014(t *testing.T) {
 		t.Error("TestSum fail")
 	}
 }
+
+func Test00015(t *testing.T) {
+	if !TestSum("cn-heavy/tube") {
+		t.Error("TestSum fail")
+	}
+}
