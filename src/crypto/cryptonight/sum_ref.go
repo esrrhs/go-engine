@@ -258,6 +258,174 @@ func (cc *cache) sum0heavy(data []byte) []byte {
 	return cc.finalHash()
 }
 
+func (cc *cache) sum0heavyxhv(data []byte) []byte {
+	//////////////////////////////////////////////////
+	// these variables never escape to heap
+	var (
+		// used in memory hard
+		a  [2]uint64
+		b  [2]uint64
+		c  [2]uint64
+		d  [2]uint64
+		_a [2]uint64
+	)
+
+	//////////////////////////////////////////////////
+	// as per CNS008 sec.3 Scratchpad Initialization
+	sha3.Keccak1600State(&cc.finalState, data)
+
+	// scratchpad init
+	aes.CnExpandKeyGo(cc.finalState[:4], &cc.rkeys)
+	copy(cc.blocks[:], cc.finalState[8:24])
+
+	// heavy
+	for i := 0; i < 16; i++ {
+		for j := 0; j < 16; j += 2 {
+			aes.CnRoundsGo(cc.blocks[j:j+2], cc.blocks[j:j+2], &cc.rkeys)
+		}
+		//__m128i tmp0 = x0;
+		tmp00, tmp01 := cc.blocks[0], cc.blocks[1]
+		//x0 = _mm_xor_si128(x0, x1);
+		cc.blocks[0], cc.blocks[1] = cc.blocks[0]^cc.blocks[2], cc.blocks[1]^cc.blocks[3]
+		//x1 = _mm_xor_si128(x1, x2);
+		cc.blocks[2], cc.blocks[3] = cc.blocks[2]^cc.blocks[4], cc.blocks[3]^cc.blocks[5]
+		//x2 = _mm_xor_si128(x2, x3);
+		cc.blocks[4], cc.blocks[5] = cc.blocks[4]^cc.blocks[6], cc.blocks[5]^cc.blocks[7]
+		//x3 = _mm_xor_si128(x3, x4);
+		cc.blocks[6], cc.blocks[7] = cc.blocks[6]^cc.blocks[8], cc.blocks[7]^cc.blocks[9]
+		//x4 = _mm_xor_si128(x4, x5);
+		cc.blocks[8], cc.blocks[9] = cc.blocks[8]^cc.blocks[10], cc.blocks[9]^cc.blocks[11]
+		//x5 = _mm_xor_si128(x5, x6);
+		cc.blocks[10], cc.blocks[11] = cc.blocks[10]^cc.blocks[12], cc.blocks[11]^cc.blocks[13]
+		//x6 = _mm_xor_si128(x6, x7);
+		cc.blocks[12], cc.blocks[13] = cc.blocks[12]^cc.blocks[14], cc.blocks[13]^cc.blocks[15]
+		//x7 = _mm_xor_si128(x7, tmp0);
+		cc.blocks[14], cc.blocks[15] = cc.blocks[14]^tmp00, cc.blocks[15]^tmp01
+	}
+
+	for i := 0; i < 4*1024*1024/8; i += 16 {
+		for j := 0; j < 16; j += 2 {
+			aes.CnRoundsGo(cc.blocks[j:j+2], cc.blocks[j:j+2], &cc.rkeys)
+		}
+		copy(cc.scratchpad[i:i+16], cc.blocks[:16])
+	}
+
+	//////////////////////////////////////////////////
+	// as per CNS008 sec.4 Memory-Hard Loop
+	a[0] = cc.finalState[0] ^ cc.finalState[4]
+	a[1] = cc.finalState[1] ^ cc.finalState[5]
+	b[0] = cc.finalState[2] ^ cc.finalState[6]
+	b[1] = cc.finalState[3] ^ cc.finalState[7]
+
+	idx0 := a[0]
+
+	for i := 0; i < 262144; i++ {
+		_a[0] = a[0]
+		_a[1] = a[1]
+
+		addr := (idx0 & 0x3ffff0) >> 3
+		aes.CnSingleRoundGo(c[:2], cc.scratchpad[addr:addr+2], &a)
+
+		cc.scratchpad[addr+0] = b[0] ^ c[0]
+		cc.scratchpad[addr+1] = b[1] ^ c[1]
+
+		addr = (c[0] & 0x3ffff0) >> 3
+		d[0] = cc.scratchpad[addr]
+		d[1] = cc.scratchpad[addr+1]
+
+		// byteMul
+		lo, hi := mul128(c[0], d[0])
+
+		// byteAdd
+		a[0] += hi
+		a[1] += lo
+
+		cc.scratchpad[addr+0] = a[0]
+		cc.scratchpad[addr+1] = a[1]
+
+		a[0] ^= d[0]
+		a[1] ^= d[1]
+
+		// heavy
+		idx0 = a[0]
+		idx0_addr := (idx0 & 0x3ffff0) >> 3
+		n := int64(cc.scratchpad[idx0_addr])
+		dd := int32(cc.scratchpad[idx0_addr+1])
+		q := n / int64(dd|0x5)
+		cc.scratchpad[idx0_addr] = uint64(n ^ q)
+		dd = ^dd
+		idx0 = uint64(dd) ^ uint64(q)
+
+		b[0] = c[0]
+		b[1] = c[1]
+	}
+
+	//////////////////////////////////////////////////
+	// as per CNS008 sec.5 Result Calculation
+	aes.CnExpandKeyGo(cc.finalState[4:8], &cc.rkeys)
+	var tmp [16]uint64
+	copy(tmp[:], cc.finalState[8:24])
+
+	for z := 0; z < 2; z++ {
+		for i := 0; i < 4*1024*1024/8; i += 16 {
+			for j := 0; j < 16; j += 2 {
+				tmp[j+0] ^= cc.scratchpad[i+j+0]
+				tmp[j+1] ^= cc.scratchpad[i+j+1]
+				aes.CnRoundsGo(tmp[j:j+2], tmp[j:j+2], &cc.rkeys)
+			}
+
+			//__m128i tmp0 = x0;
+			tmp00, tmp01 := tmp[0], tmp[1]
+			//x0 = _mm_xor_si128(x0, x1);
+			tmp[0], tmp[1] = tmp[0]^tmp[2], tmp[1]^tmp[3]
+			//x1 = _mm_xor_si128(x1, x2);
+			tmp[2], tmp[3] = tmp[2]^tmp[4], tmp[3]^tmp[5]
+			//x2 = _mm_xor_si128(x2, x3);
+			tmp[4], tmp[5] = tmp[4]^tmp[6], tmp[5]^tmp[7]
+			//x3 = _mm_xor_si128(x3, x4);
+			tmp[6], tmp[7] = tmp[6]^tmp[8], tmp[7]^tmp[9]
+			//x4 = _mm_xor_si128(x4, x5);
+			tmp[8], tmp[9] = tmp[8]^tmp[10], tmp[9]^tmp[11]
+			//x5 = _mm_xor_si128(x5, x6);
+			tmp[10], tmp[11] = tmp[10]^tmp[12], tmp[11]^tmp[13]
+			//x6 = _mm_xor_si128(x6, x7);
+			tmp[12], tmp[13] = tmp[12]^tmp[14], tmp[13]^tmp[15]
+			//x7 = _mm_xor_si128(x7, tmp0);
+			tmp[14], tmp[15] = tmp[14]^tmp00, tmp[15]^tmp01
+		}
+	}
+
+	// heavy
+	for i := 0; i < 16; i++ {
+		for j := 0; j < 16; j += 2 {
+			aes.CnRoundsGo(tmp[j:j+2], tmp[j:j+2], &cc.rkeys)
+		}
+		//__m128i tmp0 = x0;
+		tmp00, tmp01 := tmp[0], tmp[1]
+		//x0 = _mm_xor_si128(x0, x1);
+		tmp[0], tmp[1] = tmp[0]^tmp[2], tmp[1]^tmp[3]
+		//x1 = _mm_xor_si128(x1, x2);
+		tmp[2], tmp[3] = tmp[2]^tmp[4], tmp[3]^tmp[5]
+		//x2 = _mm_xor_si128(x2, x3);
+		tmp[4], tmp[5] = tmp[4]^tmp[6], tmp[5]^tmp[7]
+		//x3 = _mm_xor_si128(x3, x4);
+		tmp[6], tmp[7] = tmp[6]^tmp[8], tmp[7]^tmp[9]
+		//x4 = _mm_xor_si128(x4, x5);
+		tmp[8], tmp[9] = tmp[8]^tmp[10], tmp[9]^tmp[11]
+		//x5 = _mm_xor_si128(x5, x6);
+		tmp[10], tmp[11] = tmp[10]^tmp[12], tmp[11]^tmp[13]
+		//x6 = _mm_xor_si128(x6, x7);
+		tmp[12], tmp[13] = tmp[12]^tmp[14], tmp[13]^tmp[15]
+		//x7 = _mm_xor_si128(x7, tmp0);
+		tmp[14], tmp[15] = tmp[14]^tmp00, tmp[15]^tmp01
+	}
+
+	copy(cc.finalState[8:24], tmp[:])
+	sha3.Keccak1600Permute(&cc.finalState)
+
+	return cc.finalHash()
+}
+
 func (cc *cache) sum0lite(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap

@@ -93,3 +93,9 @@ func Test00015(t *testing.T) {
 		t.Error("TestSum fail")
 	}
 }
+
+func Test00016(t *testing.T) {
+	if !TestSum("cn-heavy/xhv") {
+		t.Error("TestSum fail")
+	}
+}
