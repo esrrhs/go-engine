@@ -9,3 +9,16 @@ func Sum(data []byte, algo string, height uint64) []byte {
 func TestSum(algo string) bool {
 	return cryptonight.TestSum(algo)
 }
+
+func TestAllSum() bool {
+	for _, algo := range Algo() {
+		if !TestSum(algo) {
+			return false
+		}
+	}
+	return true
+}
+
+func Algo() []string {
+	return cryptonight.Algo()
+}
