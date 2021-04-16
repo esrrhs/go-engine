@@ -17,7 +17,7 @@ var hashPool = [...]*sync.Pool{
 	{New: func() interface{} { return skein.New256(nil) }},
 }
 
-func (cc *cache) finalHash() []byte {
+func (cc *CryptoNight) finalHash() []byte {
 	hp := hashPool[cc.finalState[0]&0x03]
 	h := hp.Get().(hash.Hash)
 	h.Reset()

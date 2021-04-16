@@ -2,8 +2,12 @@ package crypto
 
 import "github.com/esrrhs/go-engine/src/crypto/cryptonight"
 
-func Sum(data []byte, algo string, height uint64) []byte {
-	return cryptonight.Sum(data, algo, height)
+type Crypto struct {
+	cn cryptonight.CryptoNight
+}
+
+func (c *Crypto) Sum(data []byte, algo string, height uint64) []byte {
+	return c.cn.Sum(data, algo, height)
 }
 
 func TestSum(algo string) bool {

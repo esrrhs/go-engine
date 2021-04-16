@@ -3,10 +3,9 @@ package cryptonight
 import (
 	"encoding/hex"
 	"github.com/esrrhs/go-engine/src/loggo"
-	"sync"
 )
 
-type cache struct {
+type CryptoNight struct {
 	// DO NOT change the order of these fields in this struct!
 	// They are carefully placed in this order to keep at least 16-byte aligned
 	// for some fields.
@@ -20,13 +19,6 @@ type cache struct {
 
 	blocks [16]uint64 // temporary chunk/pointer of data
 	rkeys  [40]uint32 // 10 rounds, instead of 14 as in standard AES-256
-}
-
-// cachePool is a pool of cache.
-var cachePool = sync.Pool{
-	New: func() interface{} {
-		return new(cache)
-	},
 }
 
 func Algo() []string {
@@ -58,51 +50,48 @@ func Algo() []string {
 // When variant is 1, data is required to have at least 43 bytes.
 // This is assumed and not checked by Sum. If this condition doesn't meet, Sum
 // will panic straightforward.
-func Sum(data []byte, variant string, height uint64) []byte {
-	cc := cachePool.Get().(*cache)
-
+func (cn *CryptoNight) Sum(data []byte, variant string, height uint64) []byte {
 	var sum []byte
 	switch variant {
 	case "cn/0":
-		sum = cc.sum0(data)
+		sum = cn.sum0(data)
 	case "cn/1":
-		sum = cc.sum1(data)
+		sum = cn.sum1(data)
 	case "cn/2":
-		sum = cc.sum2(data)
+		sum = cn.sum2(data)
 	case "cn/r":
-		sum = cc.sumr(data, height)
+		sum = cn.sumr(data, height)
 	case "cn/fast":
-		sum = cc.sum1fast(data)
+		sum = cn.sum1fast(data)
 	case "cn/half":
-		sum = cc.sum2half(data)
+		sum = cn.sum2half(data)
 	case "cn/xao":
-		sum = cc.sum0xao(data)
+		sum = cn.sum0xao(data)
 	case "cn/rto":
-		sum = cc.sum1rto(data)
+		sum = cn.sum1rto(data)
 	case "cn/rwz":
-		sum = cc.sum2rwz(data)
+		sum = cn.sum2rwz(data)
 	case "cn/zls":
-		sum = cc.sum2zls(data)
+		sum = cn.sum2zls(data)
 	case "cn/double":
-		sum = cc.sum2double(data)
+		sum = cn.sum2double(data)
 	case "cn-lite/0":
-		sum = cc.sum0lite(data)
+		sum = cn.sum0lite(data)
 	case "cn-lite/1":
-		sum = cc.sum1lite(data)
+		sum = cn.sum1lite(data)
 	case "cn-heavy/0":
-		sum = cc.sum0heavy(data)
+		sum = cn.sum0heavy(data)
 	case "cn-heavy/tube":
-		sum = cc.sum1heavy(data)
+		sum = cn.sum1heavy(data)
 	case "cn-heavy/xhv":
-		sum = cc.sum0heavyxhv(data)
+		sum = cn.sum0heavyxhv(data)
 	case "cn-pico":
-		sum = cc.sum2pico(data)
+		sum = cn.sum2pico(data)
 	case "cn-pico/tlo":
-		sum = cc.sum2picotlo(data)
+		sum = cn.sum2picotlo(data)
 	default:
 		return nil
 	}
-	cachePool.Put(cc)
 
 	return sum
 }
@@ -833,9 +822,10 @@ var (
 
 func TestSum(variant string) bool {
 	run := func(hashSpecs []hashSpec) bool {
+		var cn CryptoNight
 		for _, v := range hashSpecs {
 			in, _ := hex.DecodeString(v.input)
-			result := Sum(in, v.variant, v.height)
+			result := cn.Sum(in, v.variant, v.height)
 			if hex.EncodeToString(result) != v.output {
 				loggo.Error("need %v get %v", v.output, hex.EncodeToString(result))
 				return false
@@ -845,8 +835,9 @@ func TestSum(variant string) bool {
 	}
 
 	runbin := func(hashSpecs []hashSpecBin) bool {
+		var cn CryptoNight
 		for _, v := range hashSpecs {
-			result := Sum(v.input[0:76], v.variant, v.height)
+			result := cn.Sum(v.input[0:76], v.variant, v.height)
 			for j, _ := range result {
 				if result[j] != v.output[j] {
 					loggo.Error("need %v get %v", hex.EncodeToString(v.output[0:len(result)]), hex.EncodeToString(result))
@@ -858,8 +849,9 @@ func TestSum(variant string) bool {
 	}
 
 	runbin_ex := func(hashSpecs []hashSpecBin) bool {
+		var cn CryptoNight
 		for _, v := range hashSpecs {
-			result := Sum(v.input, v.variant, v.height)
+			result := cn.Sum(v.input, v.variant, v.height)
 			for j, _ := range result {
 				if result[j] != v.output[j] {
 					loggo.Error("need %v get %v", hex.EncodeToString(v.output[0:len(result)]), hex.EncodeToString(result))

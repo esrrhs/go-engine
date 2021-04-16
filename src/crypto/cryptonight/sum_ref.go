@@ -6,7 +6,7 @@ import (
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/sha3"
 )
 
-func (cc *cache) sum0(data []byte) []byte {
+func (cc *CryptoNight) sum0(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -91,7 +91,7 @@ func (cc *cache) sum0(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum0heavy(data []byte) []byte {
+func (cc *CryptoNight) sum0heavy(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -258,7 +258,7 @@ func (cc *cache) sum0heavy(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum0heavyxhv(data []byte) []byte {
+func (cc *CryptoNight) sum0heavyxhv(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -426,7 +426,7 @@ func (cc *cache) sum0heavyxhv(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum0lite(data []byte) []byte {
+func (cc *CryptoNight) sum0lite(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -511,7 +511,7 @@ func (cc *cache) sum0lite(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum1(data []byte) []byte {
+func (cc *CryptoNight) sum1(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -610,7 +610,7 @@ func (cc *cache) sum1(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum1heavy(data []byte) []byte {
+func (cc *CryptoNight) sum1heavy(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -787,7 +787,7 @@ func (cc *cache) sum1heavy(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum1lite(data []byte) []byte {
+func (cc *CryptoNight) sum1lite(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -886,7 +886,7 @@ func (cc *cache) sum1lite(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum1rto(data []byte) []byte {
+func (cc *CryptoNight) sum1rto(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -986,7 +986,7 @@ func (cc *cache) sum1rto(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum1fast(data []byte) []byte {
+func (cc *CryptoNight) sum1fast(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -1085,7 +1085,7 @@ func (cc *cache) sum1fast(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum2(data []byte) []byte {
+func (cc *CryptoNight) sum2(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -1237,7 +1237,7 @@ func (cc *cache) sum2(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum2picotlo(data []byte) []byte {
+func (cc *CryptoNight) sum2picotlo(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -1389,7 +1389,7 @@ func (cc *cache) sum2picotlo(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum2pico(data []byte) []byte {
+func (cc *CryptoNight) sum2pico(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -1541,7 +1541,7 @@ func (cc *cache) sum2pico(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum2double(data []byte) []byte {
+func (cc *CryptoNight) sum2double(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -1693,7 +1693,7 @@ func (cc *cache) sum2double(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum2zls(data []byte) []byte {
+func (cc *CryptoNight) sum2zls(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -1845,7 +1845,7 @@ func (cc *cache) sum2zls(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum2rwz(data []byte) []byte {
+func (cc *CryptoNight) sum2rwz(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -1997,7 +1997,7 @@ func (cc *cache) sum2rwz(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum2half(data []byte) []byte {
+func (cc *CryptoNight) sum2half(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -2149,7 +2149,7 @@ func (cc *cache) sum2half(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sumr(data []byte, height uint64) []byte {
+func (cc *CryptoNight) sumr(data []byte, height uint64) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -2305,7 +2305,7 @@ func (cc *cache) sumr(data []byte, height uint64) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sum0xao(data []byte) []byte {
+func (cc *CryptoNight) sum0xao(data []byte) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
@@ -2390,7 +2390,7 @@ func (cc *cache) sum0xao(data []byte) []byte {
 	return cc.finalHash()
 }
 
-func (cc *cache) sumTest(data []byte, variant int, height uint64) []byte {
+func (cc *CryptoNight) sumTest(data []byte, variant int, height uint64) []byte {
 	//////////////////////////////////////////////////
 	// these variables never escape to heap
 	var (
