@@ -8,7 +8,7 @@ type Crypto struct {
 
 func NewCrypto(family string) *Crypto {
 	cy := &Crypto{}
-	if family == "cryptonight" {
+	if family == "" || family == "cryptonight" {
 		cy.cn = cryptonight.NewCryptoNight()
 	}
 	return cy
