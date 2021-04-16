@@ -21,6 +21,10 @@ type CryptoNight struct {
 	rkeys  [40]uint32 // 10 rounds, instead of 14 as in standard AES-256
 }
 
+func NewCryptoNight() *CryptoNight {
+	return &CryptoNight{}
+}
+
 func Algo() []string {
 	return []string{
 		"cn/0",

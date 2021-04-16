@@ -3,7 +3,15 @@ package crypto
 import "github.com/esrrhs/go-engine/src/crypto/cryptonight"
 
 type Crypto struct {
-	cn cryptonight.CryptoNight
+	cn *cryptonight.CryptoNight
+}
+
+func NewCrypto(family string) *Crypto {
+	cy := &Crypto{}
+	if family == "cryptonight" {
+		cy.cn = cryptonight.NewCryptoNight()
+	}
+	return cy
 }
 
 func (c *Crypto) Sum(data []byte, algo string, height uint64) []byte {
