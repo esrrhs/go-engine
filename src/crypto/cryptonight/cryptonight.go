@@ -916,5 +916,10 @@ func TestSum(variant string) bool {
 		return b
 	}
 	aes.UseSoft(true)
-	return testfunc()
+	b = testfunc()
+	aes.UseSoft(false)
+	if !b {
+		return b
+	}
+	return true
 }
