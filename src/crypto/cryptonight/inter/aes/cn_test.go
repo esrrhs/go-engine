@@ -1,6 +1,7 @@
 package aes
 
 import (
+	"fmt"
 	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/sha3"
 	"testing"
 )
@@ -68,4 +69,28 @@ func Test0000(t *testing.T) {
 			}
 		}
 	}
+}
+
+var cn TestCryptoNight
+
+func Test0001(t *testing.T) {
+	var a1 [2]uint64
+	var c1 [2]uint64
+	var a2 [2]uint64
+	var c2 [2]uint64
+	for i := 0; i < 2; i++ {
+		a1[i] = uint64(i)
+		a2[i] = uint64(i)
+		c1[i] = uint64(i)
+		c2[i] = uint64(i)
+	}
+	CnSingleRoundGo(c1[:2], cn.scratchpad[0:2], &a1)
+	CnSingleRoundGoSoft(c2[:2], cn.scratchpad[0:2], &a2)
+
+	if c1[0] != c2[0] || c1[1] != c2[1] {
+		t.Errorf("diff at ")
+		return
+	}
+	fmt.Println(c1)
+	fmt.Println(c2)
 }

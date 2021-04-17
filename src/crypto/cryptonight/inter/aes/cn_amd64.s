@@ -83,3 +83,14 @@ TEXT _expand_key_256b<>(SB), NOSPLIT, $0
 	MOVO    X2, (BX)
 	ADDQ    $16, BX
 	RET
+
+// func CnSingleRoundAsm(dst, src *uint64, rkeys *uint64)
+TEXT ·CnSingleRoundAsm(SB), NOSPLIT, $0
+	MOVQ    dst+0(FP), AX
+	MOVQ    src+8(FP), BX
+	MOVQ    rkeys+16(FP), CX
+	MOVO    0(BX), X0
+	MOVO    0(CX), X1
+	AESENC  X1, X0
+	MOVO    X0, 0(AX)
+	RET

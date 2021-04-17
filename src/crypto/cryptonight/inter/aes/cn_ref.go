@@ -47,7 +47,7 @@ func CnRoundsGoSoft(dst, src []uint64, rkeys *[40]uint32) {
 	dst8[12], dst8[13], dst8[14], dst8[15] = byte(s3>>24), byte(s3>>16), byte(s3>>8), byte(s3)
 }
 
-func CnSingleRoundGo(dst, src []uint64, rkey *[2]uint64) {
+func CnSingleRoundGoSoft(dst, src []uint64, rkey *[2]uint64) {
 	src8 := (*[16]byte)(unsafe.Pointer(&src[0]))
 	dst8 := (*[16]byte)(unsafe.Pointer(&dst[0]))
 	rkey32 := (*[4]uint32)(unsafe.Pointer(&rkey[0]))
