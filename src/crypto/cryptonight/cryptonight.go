@@ -910,14 +910,13 @@ func TestSum(variant string) bool {
 		}
 	}
 
-	aes.UseSoft(false)
+	aes.UseSoft(true)
 	b := testfunc()
 	if !b {
 		return b
 	}
-	aes.UseSoft(true)
-	b = testfunc()
 	aes.UseSoft(false)
+	b = testfunc()
 	if !b {
 		return b
 	}
