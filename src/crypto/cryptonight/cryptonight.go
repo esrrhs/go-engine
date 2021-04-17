@@ -2,6 +2,7 @@ package cryptonight
 
 import (
 	"encoding/hex"
+	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/aes"
 	"github.com/esrrhs/go-engine/src/loggo"
 )
 
@@ -866,44 +867,54 @@ func TestSum(variant string) bool {
 		return true
 	}
 
-	switch variant {
-	case "cn/0":
-		return run(hashSpecsV0) && runbin(hashSpecBinV0)
-	case "cn/1":
-		return run(hashSpecsV1)
-	case "cn/2":
-		return run(hashSpecsV2)
-	case "cn/r":
-		return run(hashSpecsV4) && runbin_ex(hashSpecBinV4)
-	case "cn/fast":
-		return runbin(hashSpecBinV5)
-	case "cn/half":
-		return runbin(hashSpecBinV6)
-	case "cn/xao":
-		return runbin(hashSpecBinV7)
-	case "cn/rto":
-		return runbin(hashSpecBinV8)
-	case "cn/rwz":
-		return runbin(hashSpecBinV9)
-	case "cn/zls":
-		return runbin(hashSpecBinV10)
-	case "cn/double":
-		return runbin(hashSpecBinV11)
-	case "cn-lite/0":
-		return runbin(hashSpecBinV12)
-	case "cn-lite/1":
-		return runbin(hashSpecBinV13)
-	case "cn-heavy/0":
-		return runbin(hashSpecBinV14)
-	case "cn-heavy/tube":
-		return runbin(hashSpecBinV15)
-	case "cn-heavy/xhv":
-		return runbin(hashSpecBinV16)
-	case "cn-pico":
-		return runbin(hashSpecBinV17)
-	case "cn-pico/tlo":
-		return runbin(hashSpecBinV18)
-	default:
-		return false
+	testfunc := func() bool {
+		switch variant {
+		case "cn/0":
+			return run(hashSpecsV0) && runbin(hashSpecBinV0)
+		case "cn/1":
+			return run(hashSpecsV1)
+		case "cn/2":
+			return run(hashSpecsV2)
+		case "cn/r":
+			return run(hashSpecsV4) && runbin_ex(hashSpecBinV4)
+		case "cn/fast":
+			return runbin(hashSpecBinV5)
+		case "cn/half":
+			return runbin(hashSpecBinV6)
+		case "cn/xao":
+			return runbin(hashSpecBinV7)
+		case "cn/rto":
+			return runbin(hashSpecBinV8)
+		case "cn/rwz":
+			return runbin(hashSpecBinV9)
+		case "cn/zls":
+			return runbin(hashSpecBinV10)
+		case "cn/double":
+			return runbin(hashSpecBinV11)
+		case "cn-lite/0":
+			return runbin(hashSpecBinV12)
+		case "cn-lite/1":
+			return runbin(hashSpecBinV13)
+		case "cn-heavy/0":
+			return runbin(hashSpecBinV14)
+		case "cn-heavy/tube":
+			return runbin(hashSpecBinV15)
+		case "cn-heavy/xhv":
+			return runbin(hashSpecBinV16)
+		case "cn-pico":
+			return runbin(hashSpecBinV17)
+		case "cn-pico/tlo":
+			return runbin(hashSpecBinV18)
+		default:
+			return false
+		}
 	}
+
+	aes.UseSoft(false)
+	b := testfunc()
+	if !b {
+		return b
+	}
+	aes.UseSoft(true)
+	return testfunc()
 }
