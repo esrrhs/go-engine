@@ -2,6 +2,9 @@
 
 package aes
 
+func UseSoft(b bool) {
+}
+
 func CnRoundsGo(dst, src []uint64, rkeys *[40]uint32) {
 	CnRoundsGoSoft(dst, src, rkeys)
 }
