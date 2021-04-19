@@ -2,7 +2,6 @@ package cryptonight
 
 import (
 	"encoding/hex"
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/aes"
 	"github.com/esrrhs/go-engine/src/loggo"
 )
 
@@ -910,15 +909,5 @@ func TestSum(variant string) bool {
 		}
 	}
 
-	aes.UseSoft(true)
-	b := testfunc()
-	if !b {
-		return b
-	}
-	aes.UseSoft(false)
-	b = testfunc()
-	if !b {
-		return b
-	}
-	return true
+	return testfunc()
 }
