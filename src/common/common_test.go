@@ -145,13 +145,6 @@ func Test0004(t *testing.T) {
 	fmt.Println(StructToTable(&ts1))
 }
 
-func Test0005(t *testing.T) {
-	fmt.Println(GetXXHashString("1"))
-	fmt.Println(GetXXHashString("2"))
-	fmt.Println(GetXXHashString("asfaf"))
-	fmt.Println(GetXXHashString("dffd43321"))
-}
-
 func Test0006(t *testing.T) {
 	src := "safa3232sgsgd343q421dsdgsddsgsarwdsddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddgdsgsgewrngfxgcjfhrsgcbxgfhreu658545ghuj,hgfdtsz nsdtzbntshjtwg,tu523jlikr[]iwsfffffds23525ewfsu45632rqwfsgrxy4353rsfzshrey4324fASffdjftui4e22=-"
 	fmt.Println(len(src))
