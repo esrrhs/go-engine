@@ -4,10 +4,19 @@ package aes
 
 import (
 	"github.com/esrrhs/go-engine/src/loggo"
+	"golang.org/x/sys/cpu"
 	"unsafe"
 )
 
+var (
+	hasAES = cpu.X86.HasAES
+)
+
 func CnExpandKeyGo(key []uint64, rkeys *[40]uint32) {
+	if !hasAES {
+		CnExpandKeyGoSoft(key, rkeys)
+		return
+	}
 	if uintptr(unsafe.Pointer(&key[0]))%16 != 0 {
 		loggo.Error("CnExpandKeyGo %v", &key[0])
 	}
@@ -18,6 +27,10 @@ func CnExpandKeyGo(key []uint64, rkeys *[40]uint32) {
 }
 
 func CnRoundsGo(dst, src []uint64, rkeys *[40]uint32) {
+	if !hasAES {
+		CnRoundsGoSoft(dst, src, rkeys)
+		return
+	}
 	if uintptr(unsafe.Pointer(&dst[0]))%16 != 0 {
 		loggo.Error("CnRoundsGo %v", &dst[0])
 	}
@@ -31,6 +44,10 @@ func CnRoundsGo(dst, src []uint64, rkeys *[40]uint32) {
 }
 
 func CnSingleRoundGo(dst, src []uint64, rkey *[2]uint64) {
+	if !hasAES {
+		CnSingleRoundGoSoft(dst, src, rkey)
+		return
+	}
 	if uintptr(unsafe.Pointer(&dst[0]))%16 != 0 {
 		loggo.Error("CnSingleRoundGo %v", &dst[0])
 	}
