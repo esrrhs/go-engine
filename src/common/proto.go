@@ -58,9 +58,22 @@ func LoadProtobufMethods(filename string) (error, []protoreflect.MethodDescripto
 
 func MessageToFullJson(mi protoreflect.MessageDescriptor) (error, string) {
 	message := dynamicpb.NewMessage(mi)
+	fullFill(message, mi)
 	b, err := protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(message)
 	if err != nil {
 		return err, ""
 	}
 	return nil, string(b)
+}
+
+func fullFill(message *dynamicpb.Message, mi protoreflect.MessageDescriptor) {
+	for i := 0; i < mi.Fields().Len(); i++ {
+		fd := mi.Fields().Get(i)
+		if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+			submi := fd.Message()
+			submessage := dynamicpb.NewMessage(submi)
+			fullFill(submessage, submi)
+			message.Set(fd, protoreflect.ValueOfMessage(submessage))
+		}
+	}
 }
