@@ -69,7 +69,7 @@ func MessageToFullJson(mi protoreflect.MessageDescriptor) (error, string) {
 func fullFill(message *dynamicpb.Message, mi protoreflect.MessageDescriptor) {
 	for i := 0; i < mi.Fields().Len(); i++ {
 		fd := mi.Fields().Get(i)
-		if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+		if !fd.IsMap() && !fd.IsList() && fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
 			submi := fd.Message()
 			submessage := dynamicpb.NewMessage(submi)
 			fullFill(submessage, submi)
