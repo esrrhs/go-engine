@@ -1,10 +1,12 @@
 package common
 
 import (
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"io/ioutil"
 )
 
@@ -32,4 +34,33 @@ func LoadProtobuf(filename string) (error, []protoreflect.FileDescriptor) {
 	})
 
 	return nil, ret
+}
+
+func LoadProtobufMethods(filename string) (error, []protoreflect.MethodDescriptor) {
+	err, descriptors := LoadProtobuf(filename)
+	if err != nil {
+		return err, nil
+	}
+
+	var ret []protoreflect.MethodDescriptor
+	for _, descriptor := range descriptors {
+		for i := 0; i < descriptor.Services().Len(); i++ {
+			sd := descriptor.Services().Get(i)
+			for j := 0; j < sd.Methods().Len(); j++ {
+				m := sd.Methods().Get(j)
+				ret = append(ret, m)
+			}
+		}
+	}
+
+	return nil, ret
+}
+
+func MessageToFullJson(mi protoreflect.MessageDescriptor) (error, string) {
+	message := dynamicpb.NewMessage(mi)
+	b, err := protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(message)
+	if err != nil {
+		return err, ""
+	}
+	return nil, string(b)
 }
