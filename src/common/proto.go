@@ -59,7 +59,7 @@ func LoadProtobufMethods(filename string) (error, []protoreflect.MethodDescripto
 func MessageToFullJson(mi protoreflect.MessageDescriptor) (error, string) {
 	message := dynamicpb.NewMessage(mi)
 	fullFill(message, mi)
-	b, err := protojson.MarshalOptions{EmitUnpopulated: true}.Marshal(message)
+	b, err := protojson.MarshalOptions{Multiline: true, Indent: "  ", EmitUnpopulated: true}.Marshal(message)
 	if err != nil {
 		return err, ""
 	}
