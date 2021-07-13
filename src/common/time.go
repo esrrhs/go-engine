@@ -20,7 +20,7 @@ func updateNowInSecond() {
 
 	for {
 		gnowsecond = time.Now()
-		time.Sleep(time.Second)
+		Sleep(1)
 	}
 }
 
