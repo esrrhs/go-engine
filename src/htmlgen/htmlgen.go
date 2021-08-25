@@ -3,8 +3,8 @@ package htmlgen
 import (
 	"container/list"
 	"fmt"
-	"github.com/esrrhs/go-engine/src/common"
-	"github.com/esrrhs/go-engine/src/loggo"
+	"github.com/oliver256/go-engine/src/common"
+	"github.com/oliver256/go-engine/src/loggo"
 	"html/template"
 	"os"
 	"path/filepath"

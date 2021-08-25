@@ -2,7 +2,7 @@ package cryptonight
 
 import (
 	"encoding/binary"
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/blake256"
+	"github.com/oliver256/go-engine/src/crypto/cryptonight/inter/blake256"
 	"unsafe"
 )
 

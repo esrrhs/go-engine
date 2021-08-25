@@ -3,7 +3,7 @@ package fifo
 import (
 	"database/sql"
 	"errors"
-	"github.com/esrrhs/go-engine/src/loggo"
+	"github.com/oliver256/go-engine/src/loggo"
 	_ "github.com/mattn/go-sqlite3"
 	"strconv"
 )

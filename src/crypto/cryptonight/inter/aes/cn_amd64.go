@@ -3,7 +3,7 @@
 package aes
 
 import (
-	"github.com/esrrhs/go-engine/src/loggo"
+	"github.com/oliver256/go-engine/src/loggo"
 	"golang.org/x/sys/cpu"
 	"unsafe"
 )

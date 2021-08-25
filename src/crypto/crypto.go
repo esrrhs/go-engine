@@ -1,6 +1,6 @@
 package crypto
 
-import "github.com/esrrhs/go-engine/src/crypto/cryptonight"
+import "github.com/oliver256/go-engine/src/crypto/cryptonight"
 
 type Crypto struct {
 	cn *cryptonight.CryptoNight

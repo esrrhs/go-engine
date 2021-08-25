@@ -43,4 +43,4 @@ golang的通用开发库
 
 ## 使用
 * 设置GOPATH ``export GOPATH=$HOME/go``
-* 安装nodejs，设置NODE_PATH ``export NODE_PATH=$GOPATH/src/github.com/esrrhs/go-engine/node/linux/node_modules/``
+* 安装nodejs，设置NODE_PATH ``export NODE_PATH=$GOPATH/src/github.com/oliver256/go-engine/node/linux/node_modules/``

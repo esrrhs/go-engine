@@ -1,10 +1,10 @@
 package proxy
 
 import (
-	"github.com/esrrhs/go-engine/src/common"
-	"github.com/esrrhs/go-engine/src/conn"
-	"github.com/esrrhs/go-engine/src/group"
-	"github.com/esrrhs/go-engine/src/loggo"
+	"github.com/oliver256/go-engine/src/common"
+	"github.com/oliver256/go-engine/src/conn"
+	"github.com/oliver256/go-engine/src/group"
+	"github.com/oliver256/go-engine/src/loggo"
 	"os"
 	"sync"
 	"sync/atomic"

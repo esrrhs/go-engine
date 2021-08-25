@@ -5,8 +5,8 @@
 package skein1024
 
 import (
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/skein"
-	"github.com/esrrhs/go-engine/src/crypto/cryptonight/inter/skein/threefish"
+	"github.com/oliver256/go-engine/src/crypto/cryptonight/inter/skein"
+	"github.com/oliver256/go-engine/src/crypto/cryptonight/inter/skein/threefish"
 )
 
 type hashFunc struct {

@@ -2,7 +2,7 @@ package geoip
 
 import (
 	"errors"
-	"github.com/esrrhs/go-engine/src/common"
+	"github.com/oliver256/go-engine/src/common"
 	"github.com/oschwald/geoip2-golang"
 	"net"
 )

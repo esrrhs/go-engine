@@ -2,9 +2,9 @@ package spider
 
 import (
 	"github.com/PuerkitoBio/goquery"
-	"github.com/esrrhs/go-engine/src/common"
-	"github.com/esrrhs/go-engine/src/loggo"
-	"github.com/esrrhs/go-engine/src/shell"
+	"github.com/oliver256/go-engine/src/common"
+	"github.com/oliver256/go-engine/src/loggo"
+	"github.com/oliver256/go-engine/src/shell"
 	"math"
 	"net/url"
 	"runtime"

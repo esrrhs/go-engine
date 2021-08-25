@@ -1,7 +1,7 @@
 package shell
 
 import (
-	"github.com/esrrhs/go-engine/src/loggo"
+	"github.com/oliver256/go-engine/src/loggo"
 	"testing"
 )
 

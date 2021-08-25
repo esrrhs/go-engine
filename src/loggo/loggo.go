@@ -3,7 +3,7 @@ package loggo
 import (
 	"errors"
 	"fmt"
-	"github.com/esrrhs/go-engine/src/termcolor"
+	"github.com/oliver256/go-engine/src/termcolor"
 	"io"
 	"io/ioutil"
 	"os"
