@@ -27,6 +27,7 @@ jobs:
     - name: Build
       run: |
         cd src
+        export GO111MODULE=off
         for d in */ ; do
          cd "$d"
          go build -v .
