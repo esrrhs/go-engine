@@ -28,6 +28,7 @@ jobs:
     - name: Build
       run: |
         set -x
+        export GO111MODULE=off
         cd src
         for d in */ ; do
          cd "$d"
