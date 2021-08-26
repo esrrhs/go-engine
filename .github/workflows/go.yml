@@ -26,11 +26,11 @@ jobs:
 
     - name: Build
       run: |
+        set -x
         cd src
-        export GO111MODULE=off
         for d in */ ; do
          cd "$d"
-         go build -v .
-         go test . -v
+         GO111MODULE=off go build -v .
+         GO111MODULE=off go test . -v
          cd ..
         done
