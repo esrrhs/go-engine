@@ -11,7 +11,7 @@ import (
 )
 
 type QuicConn struct {
-	qsession quic.Session
+	qsession quic.Connection
 	session  *smux.Session
 	qsteam   quic.Stream
 	stream   *smux.Stream
