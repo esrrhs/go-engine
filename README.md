@@ -1,5 +1,5 @@
 # go-engine
-golang的通用开发库
+golang的通用开发库（废弃，使用[gohome](https://github.com/esrrhs/gohome)）
 
 ## 内容
 #### 数据结构
