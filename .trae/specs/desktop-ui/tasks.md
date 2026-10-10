@@ -312,3 +312,21 @@
 - **Test Requirements**:
   - `rule` TR-14.1: 完成/失败会话经 API 删除后磁盘工件消失、列表/detail 不再可见；进行中 409；未知 404；穿越 id 400。证据：`pkg/engine/delete_test.go`、`pkg/server/delete_test.go`。
   - `rule` TR-14.2: 浏览器点击垃圾桶→确认→DELETE 200→列表移除且轮询不复现；进行中会话无删除入口。证据：上述浏览器 fetch-hook 走查（200 捕获 + 截图）。
+
+## Task 15: NFR-5 大规模实测（200 节点树 / 1 万事件流）+ 删除竞态修复
+- **Status**: `completed`
+- **Priority**: medium
+- **Depends On**: Task 14
+- **背景**: Task 1-14 后唯一明确的规格遗留是 NFR-5（大规模仅结构性保护、缺实测数据）。本切片以基准测试 + 规模集成测试 + 真实浏览器实测补齐证据；回归中发现并修复一个真实产品竞态。
+- **Completion Evidence**:
+  - 规模基准/夹具（新增测试文件，无生产代码路径改动）：
+    - `pkg/engine/scale_bench_test.go`：`buildScaleTree`（root+10 复合+200 叶子，每节点含契约/DoD/2 条错误历史/token 用量，真实元数据而非空壳；树 JSON 273.9 KiB）。`BenchmarkTreeToJSON200` = **2.9 ms/op、491 KB/op、4 allocs**；`BenchmarkTreeFromJSON200` = 3.35 ms/op、3064 allocs（detail 的 Load 路径）；`TestScaleTreeShape` 断言 200 叶子、混合态、JSON >100 KiB。
+    - `pkg/agent/scale_bench_test.go`：10000 条真实大小 JSONL（1.6 MiB）。`BenchmarkNewEventRecorder10k` = **14.8 ms/op**（resume 打开只扫末尾 1 MiB 取 seq + 64 KiB 残行检查，有界）；`TestScaleEventSeq10k` 断言万事件后 seq 正确延续到 10001、不与旧事件碰撞。
+    - `pkg/server/scale_test.go`：`TestScaleSSEReplay10k`——对 1.7 MiB / 1 万事件的**已结束**会话重连 SSE，严格断言补发**恰好 200 帧**（seq 窗口 [9801,10000]）+ **恰好 1 个** tree_snapshot，耗时 **3.5 ms**（阈值 2 s），GC 后堆 2.3 MiB；`TestScaleDetailAndList`——detail 返回 117.8 KiB 树 JSON、list 200。
+  - 浏览器真实实测（临时 serve :18802 + 夹具 sess_scale_200，用后即删的 .scalegen 生成器已移除，不入库）：打开会话后初始仅渲染 root+10 复合（折叠，DOM 11 行）；展开全部 10 个复合后 200 叶子全部可交互；事件流 DOM **201 条**（200 补发 + 树快照，非 10000），seq 至 #10000；JS 堆 **6.77 MB**；折叠/展开点击到下一帧 **9.7 ms**；叶子切换（c00_l00/c00_l15/c09_l19）右侧详情即时更新；时间线滚到底再回顶流畅；顶部 SSE「已连接」；detail transferSize 235,946 B；console **零错误/零警告**。前端侧 `eventViewCap=1000`（store.ts）保证运行期内存也有界。
+  - **发现并修复真实竞态**（非测试问题）：`TestAPI_DeletePausedSession` 全量 -race 下偶发失败（约 1/3）——UI pause 经 user_pause 事件**乐观地**先把 phase 置为 PhasePaused，而 run goroutine 尚未走到取消点的终态 tree checkpoint；DELETE 据此判定终态并删文件后，迟到的 checkpoint 把 tree 文件重新写回（删除被"复活"）。修复：`handleDeleteSession` 对终态 handle 先等 `h.Done()`（与 `RunManager.Resume` 在 Load 前等待同一互锁），受 `deleteWindDownTimeout=5s` 与请求 ctx 双重约束，超时回 409「still stopping, retry」。修复后该用例 `-count=20` 全绿。
+  - 全量闸门：gofmt clean、`go vet`、`golangci-lint run` 0 issues、`go test ./... -race -count=1` 全包绿（server 10.6s 等）。
+- **Acceptance Criteria Addressed**: NFR-5（200 节点 / 1 万事件下界面与 API 保持有界、流畅）
+- **Test Requirements**:
+  - `rule` TR-15.1: 规模数字必须来自真实执行（benchmark 输出 + httptest 断言 + 浏览器 performance/DOM 采样），不得只凭结构推断。证据：上述基准数值、SSE 严格帧断言、浏览器实测清单（截图 step1/step4/step5）。
+  - `rule` TR-15.2: 规模回归中暴露的竞态必须修复并以重复执行（-count=20）证明稳定。证据：handleDeleteSession Done() 互锁 + 20 次连跑全绿。

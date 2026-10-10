@@ -17,6 +17,10 @@ import (
 	"github.com/esrrhs/divvy/pkg/llm"
 )
 
+// deleteWindDownTimeout bounds how long DELETE waits for a paused run to
+// finish its terminal checkpoint before answering 409 (client may retry).
+const deleteWindDownTimeout = 5 * time.Second
+
 // sessionParams is the create/resume request body. Every tuning field is
 // optional: absent fields fall back to DefaultConfig, which already carries
 // OPENAI_* environment values. The API key never appears in any response.
@@ -262,11 +266,28 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if h := s.mgr.Get(id); h != nil && !h.Phase().Terminal() {
-		writeJSON(w, http.StatusConflict, map[string]string{
-			"error": "session is still running; abort or pause it before deleting",
-		})
-		return
+	if h := s.mgr.Get(id); h != nil {
+		if !h.Phase().Terminal() {
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "session is still running; abort or pause it before deleting",
+			})
+			return
+		}
+		// A UI pause publishes PhasePaused optimistically (user_pause
+		// event) before the run goroutine reaches its cancellation point
+		// and writes its terminal tree checkpoint. Deleting in that
+		// window would be undone by the late save. Wait for full
+		// wind-down — the same interlock Resume uses before Load.
+		select {
+		case <-h.Done():
+		case <-time.After(deleteWindDownTimeout):
+			writeJSON(w, http.StatusConflict, map[string]string{
+				"error": "session is still stopping; retry deleting in a moment",
+			})
+			return
+		case <-r.Context().Done():
+			return
+		}
 	}
 	storage, err := engine.NewStorage(s.dataDir)
 	if err != nil {
