@@ -180,6 +180,75 @@ func (s *Storage) existingArtifacts(id string) []string {
 	return out
 }
 
+// ValidSessionID guards every storage path built from an externally supplied
+// session id: ids are minted as "sess_<timestamp>" or come from -session and
+// must never carry path separators or traversal segments, otherwise a
+// delete/read could escape the data directory.
+func ValidSessionID(id string) bool {
+	if id == "" || len(id) > 128 || id == "." || id == ".." {
+		return false
+	}
+	if strings.Contains(id, "..") {
+		return false
+	}
+	for _, r := range id {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// DeleteSession removes one session's persisted artifacts: the task tree,
+// its run log and its JSONL event stream. If the LATEST pointer names this
+// session it is removed too, so a bare `-resume` reports the usual
+// "no LATEST pointer" error instead of reviving a deleted session. It
+// returns os.ErrNotExist when no tree file exists for the id.
+func (s *Storage) DeleteSession(sessionID string) (SessionArtifacts, error) {
+	if !ValidSessionID(sessionID) {
+		return SessionArtifacts{}, fmt.Errorf("invalid session id %q", sessionID)
+	}
+	treePath := s.GetTreeFilePath(sessionID)
+	if _, err := os.Stat(treePath); err != nil {
+		if os.IsNotExist(err) {
+			return SessionArtifacts{}, os.ErrNotExist
+		}
+		return SessionArtifacts{}, err
+	}
+	paths := s.existingArtifacts(sessionID)
+	art := SessionArtifacts{ID: sessionID, Paths: make([]string, 0, len(paths))}
+	for _, p := range paths {
+		if st, err := os.Stat(p); err == nil {
+			art.Bytes += st.Size()
+		}
+	}
+	var removeErr error
+	for _, p := range paths {
+		// The tree is removed first: a racy resume must fail Load rather
+		// than attach a run whose event file is disappearing beneath it.
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) && removeErr == nil {
+			removeErr = err
+		}
+	}
+	if s.latestID() == sessionID {
+		latestPath := filepath.Join(s.baseDir, "LATEST")
+		if st, err := os.Stat(latestPath); err == nil {
+			art.Bytes += st.Size()
+		}
+		if err := os.Remove(latestPath); err != nil {
+			if !os.IsNotExist(err) && removeErr == nil {
+				removeErr = err
+			}
+		} else {
+			paths = append(paths, latestPath)
+		}
+	}
+	art.Paths = paths
+	return art, removeErr
+}
+
 // latestID reads the LATEST pointer, returning "" when there is none.
 func (s *Storage) latestID() string {
 	data, err := os.ReadFile(filepath.Join(s.baseDir, "LATEST"))

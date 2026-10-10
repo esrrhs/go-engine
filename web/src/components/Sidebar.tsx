@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store'
 import type { SessionRow } from '../types'
-import { FolderIcon, ListIcon, PlayIcon, PlusIcon, SpinnerIcon } from './icons'
+import { FolderIcon, ListIcon, PlayIcon, PlusIcon, SpinnerIcon, TrashIcon } from './icons'
 import { FileTree } from './FileTree'
 
 type Filter = 'all' | 'active' | 'done' | 'failed' | 'resumable'
@@ -42,10 +42,12 @@ function SessionItem({ row }: { row: SessionRow }) {
   const currentId = useStore((s) => s.currentId)
   const openSession = useStore((s) => s.openSession)
   const resumeSession = useStore((s) => s.resumeSession)
+  const deleteSession = useStore((s) => s.deleteSession)
   const active = row.id === currentId
   const kind = rowKind(row)
   const progress = row.leaves_all > 0 ? `${row.leaves_done}/${row.leaves_all}` : null
   const [resuming, setResuming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const kindLabel: Record<Filter, string> = {
     all: '',
@@ -62,16 +64,41 @@ function SessionItem({ row }: { row: SessionRow }) {
     resumable: 'text-amber-400/90',
   }
 
+  const onDelete = async () => {
+    const title = (row.goal || '(无标题)').slice(0, 60)
+    const ok = window.confirm(
+      `确定删除会话「${title}」吗？\n\n任务树、事件记录与日志都会被永久删除，且无法恢复。`,
+    )
+    if (!ok) return
+    setDeleting(true)
+    await deleteSession(row.id)
+    setDeleting(false)
+  }
+
   return (
     <div
-      className={`group w-full rounded-md border px-2.5 py-2 transition ${
+      className={`group relative w-full rounded-md border px-2.5 py-2 transition ${
         active
           ? 'border-brand-600/70 bg-brand-600/10'
           : 'border-transparent hover:border-line hover:bg-ink-800/70'
       }`}
     >
+      {kind !== 'active' && (
+        <button
+          onClick={() => void onDelete()}
+          disabled={deleting}
+          title="删除会话"
+          className="absolute right-1.5 top-1.5 rounded p-0.5 text-slate-600 opacity-0 transition hover:bg-ink-700 hover:text-rose-400 focus:opacity-100 group-hover:opacity-100 disabled:opacity-60"
+        >
+          {deleting ? (
+            <SpinnerIcon width={12} height={12} />
+          ) : (
+            <TrashIcon width={12} height={12} />
+          )}
+        </button>
+      )}
       <button onClick={() => void openSession(row.id)} className="block w-full text-left">
-        <div className="line-clamp-2 text-[12.5px] leading-snug text-slate-200">
+        <div className="line-clamp-2 pr-5 text-[12.5px] leading-snug text-slate-200">
           {row.goal || '(无标题)'}
         </div>
         <div className="mt-1 flex items-center justify-between text-[11px] text-slate-500">

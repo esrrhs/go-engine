@@ -251,6 +251,52 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleDeleteSession removes one finished session's persisted tree, log
+// and event stream (FR-9). Running sessions are refused with 409 so a live
+// run never loses its files mid-write.
+func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !engine.ValidSessionID(id) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "invalid session id",
+		})
+		return
+	}
+	if h := s.mgr.Get(id); h != nil && !h.Phase().Terminal() {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "session is still running; abort or pause it before deleting",
+		})
+		return
+	}
+	storage, err := engine.NewStorage(s.dataDir)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	art, err := storage.DeleteSession(id)
+	if errors.Is(err, os.ErrNotExist) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	// Drop the lingering terminal handle, if any. After the tree file is
+	// gone a new run can neither Load (resume) nor mint this id, so a
+	// non-terminal handle here is practically unreachable; log it instead
+	// of failing an already-committed deletion.
+	if ferr := s.mgr.Forget(id); ferr != nil {
+		s.logf("delete session %s: %v", id, ferr)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"session_id": id,
+		"removed":    art.Paths,
+		"bytes":      art.Bytes,
+	})
+}
+
 // ---- run control actions -------------------------------------------------
 
 func (s *Server) handlePlanApprove(w http.ResponseWriter, r *http.Request) {

@@ -33,6 +33,7 @@ interface AppState {
   createSession: (params: SessionParams) => Promise<string>
   openSession: (id: string) => Promise<void>
   resumeSession: (id: string) => Promise<boolean>
+  deleteSession: (id: string) => Promise<boolean>
   selectNode: (id: string | null) => void
   openFile: (path: string, sessionId?: string | null) => void
   closeFile: () => void
@@ -144,6 +145,23 @@ export const useStore = create<AppState>((set, get) => ({
       const res = await api.resumeSession(id, {})
       await get().refreshSessions()
       await get().openSession(res.session_id)
+      set({ actionError: null })
+      return true
+    } catch (e) {
+      set({ actionError: errorText(e) })
+      return false
+    }
+  },
+
+  deleteSession: async (id) => {
+    try {
+      await api.deleteSession(id)
+      // If the deleted session was open, drop its view; the SSE client is
+      // torn down by openSession('') via disconnect().
+      if (get().currentId === id) {
+        await get().openSession('')
+      }
+      await get().refreshSessions()
       set({ actionError: null })
       return true
     } catch (e) {

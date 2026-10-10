@@ -79,6 +79,12 @@ export const api = {
   resumeSession: (id: string, params: Partial<SessionParams> = {}) =>
     request<CreateResult>('POST', `/sessions/${id}/resume`, params),
 
+  deleteSession: (id: string) =>
+    request<{ ok: boolean; session_id: string; removed: string[]; bytes: number }>(
+      'DELETE',
+      `/sessions/${id}`,
+    ),
+
   planApprove: (id: string) =>
     request<{ ok: boolean }>('POST', `/sessions/${id}/plan/approve`, {}),
   planAdjust: (id: string, comment: string) =>

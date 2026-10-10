@@ -291,3 +291,24 @@
 - **Test Requirements**:
   - `rule` TR-13.1: 全部 AC 具备独立证据（测试/截图/走查记录），CI 全绿。证据：review.md 与上述 1~4 项。
   - `rubric` TR-13.2: 整体完成度；scale 1-5；anchors 1=仅后端可用/3=主路径可用但有断点/5=浏览器与 Tauri 双形态主流程顺滑；threshold >=4；独立 Review 评分 4/5（达标）。
+
+## Task 14: 单会话删除 API 与界面入口（FR-9 补漏）
+- **Status**: `completed`
+- **Priority**: medium
+- **Depends On**: Task 13
+- **背景**: Task 13 收尾后对照 spec 复核发现 FR-9「删除会话复用现有 prune 能力，本期至少支持单会话删除的后端 API，前端可后补」从未实现（现有只有 CLI `-prune` 批量按 keep 数清理）。本切片补齐该规格缺口，前端入口一并完成。
+- **Completion Evidence**:
+  - `pkg/engine/storage.go`：新增 `ValidSessionID`（白名单 `[A-Za-z0-9_-]`、≤128 字符、拒 `..`/`.`/空，从源头封死路径穿越）与 `DeleteSession(id)`——删除 tree/log/events 三类工件；tree 先删使竞态 resume 直接 Load 失败；LATEST 指向该会话时同步删除指针（裸 `-resume` 回到常规 no-LATEST 错误）；tree 不存在返回 `os.ErrNotExist`；返回 `SessionArtifacts`（实际删除路径+字节数）。
+  - `pkg/agent/runmanager.go`：新增 `RunManager.Forget(id)`——仅允许摘除 done/failed/paused 终态残留句柄（非终态返回 `ErrSessionActive`），句柄缺失不报错。
+  - `pkg/server/server.go`：注册 `DELETE /api/sessions/{id}`；`pkg/server/sessions.go` 新增 `handleDeleteSession`：非法 id 400、非终态 live 409（「先中止或暂停」）、磁盘无 tree 404、存储错误 500；删除成功后 `mgr.Forget` 摘除残留句柄（终态检查在前，理论上不可达的非终态仅 logf 不回滚已提交删除），200 返回 `removed` 路径清单与 `bytes`。
+  - 前端：`api/client.ts` 加 `deleteSession`；`store.ts` 加 `deleteSession(id)` action（成功后若当前打开的正是该会话则 `openSession('')` 断 SSE 并复位视图，再 refresh 目录；错误走 actionError toast）；`Sidebar.tsx` 会话卡片右上角 hover 显现的垃圾桶按钮（仅非 active 卡片渲染：完成/失败/可续跑/暂停可删，进行中无入口），点击弹原生 `window.confirm` 中文二次确认（含目标截断与不可恢复提示），删除中显示 spinner；`icons.tsx` 新增零依赖 TrashIcon。重建并提交 dist：`index-cd5gVtTd.js` 207.26KB/gzip 66.10KB、`index-B8FYVbZa.css` 27.42KB，两次构建逐文件 SHA256 完全一致（CI dist 一致性闸门可过）。
+  - 测试：`pkg/engine/delete_test.go`（新）4 个——删除 s2 后 tree/log/events/LATEST 四文件全消失、s1/s3 幸存、ListSessions=2、重复删 `os.ErrNotExist`；LATEST 指向他人时删除 s1 指针保留；恶意 id 表（空/`.`/`..`/`../s3`/`a/b`/`a\b`/换行/空格/129 字符）全拒且无文件被删；ValidSessionID good/bad 表。`pkg/server/delete_test.go`（新）4 个 httptest——完成会话 DELETE 200 后磁盘三文件消失、detail 404、列表无该行、重复删 404；plan_review 进行中删除 409 且 tree 幸存；真实 gated worker 跑批 pause→PhasePaused 后删除 200、tree 消失、再 resume 404；未知 id 404 与 4 个 URL 编码穿越 id（`..%2f`、`a%2Fb`、`%2e%2e`、`x%20y`）400。
+  - 全量闸门：`go build/vet ./...`、gofmt clean、`golangci-lint run` 0 issues、`go test ./... -race -count=1` 全包绿（曾遇 go-build 缓存损坏，`go clean -cache` 后恢复）；`npm run build` tsc 严格零错误。
+  - 真实端到端走查（go serve :18801 + 复用 :18999 mock LLM，env 传 OPENAI_BASE_URL/API_KEY/MODEL——serve 的 LLM 配置只走环境/表单，CLI `-base-url` 等 flag 按 FR-12 不接线）：API 造 A=完成、B=中止失败、C=待审批；HTTP 层验证 DELETE A/B=200（响应含 removed 绝对路径与 bytes）、DELETE C=409、穿越 id=400、LATEST 随指向会话删除、删除后 detail=404。浏览器自动化两轮：第一轮确认进行中 C 卡片无垃圾桶、A/B hover 出现垃圾桶、原生 confirm 弹出（自动化按 Enter 未被对话框接收导致取消，未发出 DELETE，属测试操作问题非产品缺陷——磁盘 mtime 证实文件未被删）；第二轮以 fetch hook 确定性验证：点击 D（完成态）垃圾桶→confirm 接受→捕获 `DELETE /api/sessions/sess_20261010_231109` **status 200**→列表即时移除、6 秒轮询后不复现、`button[title="删除会话"]` 总数为 0（进行中 C 无入口）、console 无错误。serve SIGINT 优雅退出。
+- **Description**:
+  - 后端 DELETE 单会话（tree+log+events+LATEST），live 非终态拒绝；复用 engine 存储层，复用 RunManager 既有 ErrSessionActive 语义映射 409。
+  - 前端侧栏删除入口 + 二次确认；删除当前打开会话时正确断开 SSE 并复位视图。
+- **Acceptance Criteria Addressed**: AC-5（会话生命周期管理完整化：列举/查看/续跑/删除），FR-9 收口
+- **Test Requirements**:
+  - `rule` TR-14.1: 完成/失败会话经 API 删除后磁盘工件消失、列表/detail 不再可见；进行中 409；未知 404；穿越 id 400。证据：`pkg/engine/delete_test.go`、`pkg/server/delete_test.go`。
+  - `rule` TR-14.2: 浏览器点击垃圾桶→确认→DELETE 200→列表移除且轮询不复现；进行中会话无删除入口。证据：上述浏览器 fetch-hook 走查（200 捕获 + 截图）。

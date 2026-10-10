@@ -79,6 +79,12 @@ export const DocIcon = (p: IconProps) => (
   </svg>
 )
 
+export const TrashIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 7M10 11v6M14 11v6" />
+  </svg>
+)
+
 export const SpinnerIcon = (p: IconProps) => (
   <svg {...base(p)} className={`animate-spin ${p.className ?? ''}`}>
     <path d="M21 12a9 9 0 1 1-6.2-8.56" />

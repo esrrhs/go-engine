@@ -118,6 +118,24 @@ func (m *RunManager) ActiveSessions() []string {
 	return ids
 }
 
+// Forget drops the lingering terminal handle of a session whose on-disk
+// artifacts have been deleted. Non-terminal (still runnable) handles are
+// rejected: files must not disappear while a run is appending to them. A
+// missing handle is not an error.
+func (m *RunManager) Forget(sessionID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	h, ok := m.active[sessionID]
+	if !ok {
+		return nil
+	}
+	if !h.Phase().Terminal() {
+		return fmt.Errorf("%w: %s", ErrSessionActive, sessionID)
+	}
+	delete(m.active, sessionID)
+	return nil
+}
+
 // startingReservation marks a workdir between Start's lock acquisition and
 // the orchestrator knowing its minted session id. It is never a valid id.
 const startingReservation = ":starting:"
