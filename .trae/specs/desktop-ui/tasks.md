@@ -347,3 +347,17 @@
 - **Test Requirements**:
   - `rule` TR-16.1: replay/live 帧的标记边界必须在真实 SSE 流上逐帧断言（补发有标记、subscribe 快照与 live 无标记）。证据：`TestSSE_ReplayLiveHeartbeatAndReconnect`。
   - `rule` TR-16.2: 超长行与截断尾行两个边界各有独立测试；修复前端到端无审批 UI 闪回。证据：`eventsseq_test.go` 两例 + 浏览器判别走查。
+
+## Task 17: NFR-5 常规操作端到端延迟量化（<1s 条款）
+- **Status**: `completed`
+- **Priority**: low
+- **Depends On**: Task 16
+- **背景**: Task 15 量化了 NFR-5 的规模条款（200 节点/1 万事件），但其前半句「常规操作（状态变更、日志）端到端延迟 < 1s（本机）」始终缺自动化证据。本切片补确定性测试收口；至此 spec FR-1~12、NFR-1~7 与 review.md 全部 backlog 清零。
+- **Completion Evidence**:
+  - `pkg/server/latency_test.go`（新）`TestSSE_LiveEventLatencyUnderSecond`：真实 scripted run 停在 plan_review，SSE 建连并排空 replay+subscribe 快照（记录开窗基线 seq）；从 POST `/plan/approve` 起计时，到收到第一条 seq 大于基线的**无 replay 标记 live 帧**为止，断言 < 1s，否则失败。实测 **863.7 µs**（≈0.86ms，余量约 1000 倍）；`-count=5` 连跑 0.07~0.10s 级全程通过（测试总耗时含建连，单帧交付均在毫秒级）。
+  - 该测试覆盖的链路：HTTP action 提交 → guider 控制通道 → 事件 Record 落盘 → EventRecorder fan-out → SSE live 分支（非补发）序列化写出；与 Task 16 的 replay 标记语义联动（基线后旧帧不计）。
+  - 界面侧已有 Task 15 实测：展开/折叠点击到下一帧 9.7ms、叶子详情切换即时，与本结果共同满足 NFR-5 延迟条款。
+  - 全量闸门：gofmt clean、vet、golangci-lint 0 issues、`go test ./... -race -count=1` 全包绿。
+- **Acceptance Criteria Addressed**: NFR-5 延迟条款（常规操作端到端 <1s）
+- **Test Requirements**:
+  - `rule` TR-17.1: 延迟断言必须测量真实 SSE 交付（收到帧），而非函数调用返回；必须区分 live 帧与开窗补发。证据：`TestSSE_LiveEventLatencyUnderSecond` 实测 0.86ms。
