@@ -253,19 +253,27 @@ func highestEventSeq(path string) int64 {
 	if _, err := f.Seek(start, 0); err != nil {
 		return 0
 	}
-	sc := bufio.NewScanner(f)
-	// Tree snapshot lines can be large; mirror the SSE replay ceiling.
-	sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	// ReadBytes (unlike Scanner) has no fixed line cap: a >16 MiB tree
+	// snapshot line must not abort the scan and make the resumed counter
+	// collide with the higher-seq lines following it. The line is freed
+	// every iteration, so memory stays bounded by the largest single line.
+	r := bufio.NewReaderSize(f, 64*1024)
 	var highest int64
-	for sc.Scan() {
-		var head struct {
-			Seq int64 `json:"seq"`
+	for {
+		line, err := r.ReadBytes('\n')
+		if len(line) > 0 {
+			var head struct {
+				Seq int64 `json:"seq"`
+			}
+			// A seek into the tail can land mid-line; a crashed writer can
+			// leave a torn final line: both unmarshal as errors and are
+			// skipped without affecting the scan.
+			if jerr := json.Unmarshal(bytes.TrimSpace(line), &head); jerr == nil && head.Seq > highest {
+				highest = head.Seq
+			}
 		}
-		if err := json.Unmarshal(sc.Bytes(), &head); err != nil {
-			continue // tolerate a torn final line
-		}
-		if head.Seq > highest {
-			highest = head.Seq
+		if err != nil {
+			break // io.EOF or a real read error; whatever parsed stands
 		}
 	}
 	return highest

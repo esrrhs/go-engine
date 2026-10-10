@@ -183,11 +183,20 @@ func TestSSE_ReplayLiveHeartbeatAndReconnect(t *testing.T) {
 			sawHeartbeat = true
 			continue
 		}
-		kind, _ := frameKind(t, f)
+		kind, m := frameKind(t, f)
+		tagged, _ := m["replay"].(bool)
 		switch kind {
 		case "plan_review":
+			// P2-4: history frames are tagged so clients never apply old
+			// high-rank phases to the live phase machine.
+			if !tagged {
+				t.Fatal("replayed plan_review frame missing replay:true")
+			}
 			sawReview = true
 		case "tree_snapshot":
+			if reason, _ := m["reason"].(string); reason == "subscribe" && tagged {
+				t.Fatal("authoritative subscribe snapshot must not be tagged replay")
+			}
 			sawSnapshot = true
 		}
 	}
@@ -206,6 +215,9 @@ func TestSSE_ReplayLiveHeartbeatAndReconnect(t *testing.T) {
 	for time.Now().Before(deadline) && !sawRunning {
 		f := nextFrame(t, r1, time.Second)
 		kind, m := frameKind(t, f)
+		if tagged, _ := m["replay"].(bool); tagged {
+			t.Fatalf("live %s frame must not carry the replay tag", kind)
+		}
 		if kind == "state_change" && (m["to"] == "RUNNING" || m["to"] == "COMPLETED") {
 			sawRunning = true
 		}
@@ -239,7 +251,9 @@ func TestSSE_ReplayLiveHeartbeatAndReconnect(t *testing.T) {
 		t.Fatal("no live tree_snapshot after approval")
 	}
 
-	// Reconnect: the persisted tail restores the final state.
+	// Reconnect: the persisted tail restores the final state. Everything
+	// before the synthetic subscribe snapshot is history and must be tagged
+	// replay; the subscribe snapshot itself stays untagged.
 	resp2, r2 := open("")
 	defer resp2.Body.Close()
 	gotStateChange, gotSnapshot, maxSeq := false, false, int64(0)
@@ -250,11 +264,18 @@ func TestSSE_ReplayLiveHeartbeatAndReconnect(t *testing.T) {
 			continue
 		}
 		kind, m := frameKind(t, f)
+		tagged, _ := m["replay"].(bool)
+		isSubscribe := kind == "tree_snapshot" && m["reason"] == "subscribe"
+		if isSubscribe {
+			if tagged {
+				t.Fatal("subscribe snapshot on reconnect must not be tagged")
+			}
+			gotSnapshot = true
+		} else if !tagged {
+			t.Fatalf("reconnected pre-snapshot %s frame missing replay:true", kind)
+		}
 		if kind == "state_change" {
 			gotStateChange = true
-		}
-		if kind == "tree_snapshot" {
-			gotSnapshot = true
 		}
 		if f.id != "" {
 			if v, ok := m["seq"].(float64); ok && int64(v) > maxSeq {

@@ -188,6 +188,14 @@ export const useStore = create<AppState>((set, get) => ({
             s.events.length >= eventViewCap
               ? [...s.events.slice(s.events.length - eventViewCap + 1), ev]
               : [...s.events, ev]
+          // Replayed history feeds the timeline only: old high-rank phases
+          // in the replay window (plan_review/leaf_approval/ask) must not
+          // flash over the current state, and a stale replayed snapshot
+          // must not replace the tree. The untagged subscribe snapshot and
+          // the live tail drive live/tree state.
+          if (ev.replay) {
+            return { events }
+          }
           let live = s.live
           let tree = s.tree
           let selectedNodeId = s.selectedNodeId

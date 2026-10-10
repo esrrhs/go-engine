@@ -68,6 +68,10 @@ export interface StreamEvent {
   ts?: string
   kind: string
   node_id?: string
+  // Server-side replay tag: frames replayed from the JSONL tail on
+  // (re)connect are history — they populate the timeline but must not
+  // drive the live phase machine or replace the current tree.
+  replay?: boolean
   [key: string]: unknown
 }
 

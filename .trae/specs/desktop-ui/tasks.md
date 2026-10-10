@@ -330,3 +330,20 @@
 - **Test Requirements**:
   - `rule` TR-15.1: 规模数字必须来自真实执行（benchmark 输出 + httptest 断言 + 浏览器 performance/DOM 采样），不得只凭结构推断。证据：上述基准数值、SSE 严格帧断言、浏览器实测清单（截图 step1/step4/step5）。
   - `rule` TR-15.2: 规模回归中暴露的竞态必须修复并以重复执行（-count=20）证明稳定。证据：handleDeleteSession Done() 互锁 + 20 次连跑全绿。
+
+## Task 16: 事件流健壮性收口（P2-4 补发相位闪回 + P2-5 超长事件行扫描）
+- **Status**: `completed`
+- **Priority**: medium
+- **Depends On**: Task 15
+- **背景**: review.md 剩余 backlog 中的 P2-4/P2-5，均属事件回放正确性。P2-4：断线重连补发不区分 replay/live，补发窗内旧的高秩相位（plan_review pending / leaf_approval / ask）会短暂压过当前 running，且历史会话可能被补发帧造出假 live；P2-5：highestEventSeq 的 Scanner 单行上限 16 MiB，超长 tree_snapshot 行后若有更高 seq 行会导致续号碰撞。
+- **Completion Evidence**:
+  - P2-4 服务端（`pkg/server/sse.go`）：`replayEvents` 对每条 JSONL 补发帧注入 `"replay": true`（先解出 map 打标再 marshal，坏行回退原文）；权威的 subscribe tree_snapshot 与所有 live fan-out 帧保持无标记。
+  - P2-4 客户端（`web/src/types.ts` 加 `replay?: boolean`；`web/src/store.ts`）：onEvent 中带 replay 标记的帧**只追加事件时间线**并提前返回，不再驱动相位机（plan_review/leaf_approval/ask/state_change/session_end/user_pause 全部不作用于 live），也不替换树；live 相位与当前树仅由无标记的 subscribe 快照和 live tail 驱动。openSession 调和分支的 `session_id === id` 校验复核确认现状已具备。
+  - P2-5（`pkg/agent/events.go`）：`highestEventSeq` 弃用有 16 MiB 行上限的 bufio.Scanner，改用 `bufio.Reader.ReadBytes('\n')`（无固定行上限，逐行释放，内存只受单行大小约束）；seek 落入行中间与崩溃半写尾行经 JSON 解析失败跳过，不影响扫描。
+  - 测试：`pkg/server/sse_test.go` 在 `TestSSE_ReplayLiveHeartbeatAndReconnect` 中断言——首次连接补发的 plan_review 必须 `replay:true`、subscribe 快照无标记；approve 后 live 帧（含 state_change/snapshot）一律无标记；重连时 subscribe 快照之前的所有帧必须有标记、快照本身无标记。`pkg/agent/eventsseq_test.go`（新）2 个：16 MiB+1 KiB 的合法超长行后 seq 42 仍被取到（旧实现会扫描中止）；无换行半写尾行被跳过、最高 seq=7。
+  - 全量闸门：gofmt clean、vet、golangci-lint 0 issues、`go test ./... -race -count=1` 全包绿；前端 tsc 严格 + vite 构建通过，dist 两次构建逐文件 SHA256 一致（新 `index-BgV-TEIy.js` 207.29KB/gzip 66.11KB）。
+  - 浏览器判别实测（临时 serve :18803，专门构造已结束会话 sess_flash_replay：补发尾窗 seq 9990/9992/9994 为 plan_review pending/leaf_approval pending/ask_pending、末帧 10000 session_end=completed；夹具与生成器用后即删）：curl 确认补发帧带 `replay:true`、subscribe 快照无标记；浏览器打开后**无**计划审批横条、**无**叶子审批卡（按钮计数 0）、**无** AskDialog（dialog/input 计数 0）、中栏头部稳定显示「历史会话（只读）」、MutationObserver 3 秒观察置顶区从未出现待审批/等待回答/规划评审；陈旧相位仅作为 201 条时间线历史条目展示；NFR-5 会话视图无回归；console 无 JS 运行时错误（仅有切会话时旧 SSE abort 的 INCOMPLETE_CHUNKED/ABORTED 网络噪声）。
+- **Acceptance Criteria Addressed**: review P2-4、P2-5 收口；NFR-5 事件流正确性补强
+- **Test Requirements**:
+  - `rule` TR-16.1: replay/live 帧的标记边界必须在真实 SSE 流上逐帧断言（补发有标记、subscribe 快照与 live 无标记）。证据：`TestSSE_ReplayLiveHeartbeatAndReconnect`。
+  - `rule` TR-16.2: 超长行与截断尾行两个边界各有独立测试；修复前端到端无审批 UI 闪回。证据：`eventsseq_test.go` 两例 + 浏览器判别走查。

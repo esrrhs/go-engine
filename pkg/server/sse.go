@@ -151,6 +151,17 @@ func (s *Server) replayEvents(w http.ResponseWriter, f http.Flusher, path string
 			idStr = strconv.FormatInt(head.Seq, 10)
 			maxSeq = max(maxSeq, head.Seq)
 		}
+		// Tag replayed frames so clients can distinguish history from the
+		// live tail: phase transitions in the replay window (e.g. an old
+		// plan_review pending) must not drive the live phase machine and
+		// flash a stale approval bar over the current running state.
+		var ev map[string]any
+		if err := json.Unmarshal(line, &ev); err == nil {
+			ev["replay"] = true
+			if tagged, err := json.Marshal(ev); err == nil {
+				line = tagged
+			}
+		}
 		writeSSEEvent(w, f, idStr, line, secrets)
 	}
 	f.Flush()
