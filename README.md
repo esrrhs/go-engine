@@ -242,36 +242,50 @@ go build -o divvy ./cmd/divvy
 
 在界面里可以：新建会话（填 goal/model/baseURL/apiKey，apiKey 只在内存中，不写入事件流与日志）、实时看任务树与事件流、审批/调整/中止计划、逐叶子审查 diff（`approval_mode=manual`，批准才合并、拒绝带意见重做）、回答 ask、暂停/续跑/add/redo、浏览历史会话与只读查看工作区文件。Ctrl+C 会优雅关闭：运行中的会话先保存任务树，之后可在界面或用 `-guided -resume -session <id>` 继续。
 
-### 桌面应用（Tauri，macOS）
+### 桌面应用（Tauri，macOS / Linux / Windows）
 
-`desktop/` 是 Tauri v2 外壳：启动时按平台定位并拉起内置的 `divvy -serve` sidecar（externalBin），解析其启动日志里的随机端口与一次性 token，再把 WebView 指向 sidecar（发布模式）或 Vite（开发模式，`/api` 代理到 sidecar）。数据与默认工作区在 `~/Library/Application Support/com.divvy.desktop/`；关闭窗口或退出应用时先给 sidecar 发 SIGINT 让运行中的会话 checkpoint，等待 12s 兜底后再强杀，不留僵尸进程；sidecar 启动或 URL/token 解析失败会弹原生错误框并以非零码退出。
+`desktop/` 是 Tauri v2 外壳：启动时按平台定位并拉起内置的 `divvy -serve` sidecar（externalBin），解析其启动日志里的随机端口与一次性 token，再把 WebView 指向 sidecar（发布模式）或 Vite（开发模式，`/api` 代理到 sidecar）。数据与默认工作区放在平台应用数据目录（macOS：`~/Library/Application Support/com.divvy.desktop/`；Linux：`~/.local/share/com.divvy.desktop/`；Windows：`%APPDATA%\com.divvy.desktop`）。
 
-macOS 前置（首次）：
+进程管理按平台实现：POSIX 上 sidecar 运行在独立进程组，关窗先发 SIGINT 让运行中的会话 checkpoint，等待 12s 兜底后再 SIGKILL 整个进程组，不留僵尸进程；Windows 上 GUI 程序没有控制台信号通道，关窗即 `taskkill /F /T` 结束整棵进程树（叶子工具子进程一并清理），会话在下次启动时从最近一次 checkpoint 续跑。sidecar 启动或 URL/token 解析失败会弹原生错误框并以非零码退出。
+
+前置条件：
 
 ```bash
-# 1. Xcode 命令行工具（clang/WebKit 由它提供）
-xcode-select --install
-# 2. Rust 工具链
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# 3. Go（构建 sidecar 用）与 Node.js（构建前端用）
+# macOS
+xcode-select --install                 # Xcode 命令行工具
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # Rust
+# 另需 Go（构建 sidecar）与 Node.js（构建前端/运行 Tauri 钩子）
+
+# Ubuntu/Debian（Tauri Linux 依赖）
+sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+  librsvg2-dev libssl-dev libxdo-dev file
+# 其余同 macOS：Rust（rustup）、Go、Node.js
+
+# Windows
+# - Rust（rustup，默认 msvc 工具链与 Visual Studio Build Tools）
+# - WebView2 Runtime（Win11 自带）
+# - Go、Node.js
+# - Git for Windows：叶子的 shell 工具按 sh 方言执行，需要 sh.exe 在 PATH
 ```
 
-开发模式（热更新前端；首次会先 `go build` sidecar 再拉起 Vite）：
+开发模式（热更新前端；首次会先 `go build` sidecar 再拉起 Vite；跨平台钩子由 Node 实现，不依赖 POSIX shell）：
 
 ```bash
 cd desktop
 npm ci
-npm run dev          # = tauri dev；脚本会自动构建 binaries/divvy-sidecar-<triple>
+npm run dev          # = tauri dev；自动构建 binaries/divvy-sidecar-<triple>
 ```
 
-发布构建（构建前端 → 构建 sidecar → 打包 `.app`/`.dmg`）：
+发布构建（构建前端 → 构建 sidecar → 按当前平台打包：macOS 为 `.app`/`.dmg`，Linux 为 `.deb`/AppImage，Windows 为 NSIS 安装包）：
 
 ```bash
 cd desktop && npm run build
-# 产物：target/release/bundle/macos/divvy.app、target/release/bundle/dmg/*.dmg
+# macOS 产物：target/release/bundle/macos/divvy.app、target/release/bundle/dmg/*.dmg
+# Linux 产物：target/release/bundle/deb/*.deb、target/release/bundle/appimage/*.AppImage
+# Windows 产物：target/release/bundle/nsis/*.exe
 ```
 
-sidecar 二进制按 `$GOOS/$GOARCH` 映射命名（`binaries/divvy-sidecar-aarch64-apple-darwin` 等），可单独运行 `desktop/scripts/build-sidecar.sh` 刷新。排障可用环境变量覆盖：`DIVVY_SIDECAR`（替换后端程序路径）、`DIVVY_SIDECAR_PORT`、`DIVVY_SIDECAR_STARTUP_TIMEOUT_MS`。
+sidecar 二进制按 `$GOOS/$GOARCH` 映射命名（`binaries/divvy-sidecar-aarch64-apple-darwin`、`divvy-sidecar-x86_64-pc-windows-msvc.exe` 等，支持 darwin/linux/windows × amd64/arm64 六个目标），可单独运行 `node desktop/scripts/build-sidecar.mjs` 刷新（设置 `GOOS/GOARCH` 即可交叉构建）。排障可用环境变量覆盖：`DIVVY_SIDECAR`（替换后端程序路径）、`DIVVY_SIDECAR_PORT`、`DIVVY_SIDECAR_STARTUP_TIMEOUT_MS`。
 
 ### 成本估算与预算护栏
 

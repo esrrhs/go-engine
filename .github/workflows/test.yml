@@ -115,6 +115,112 @@ jobs:
       - name: Test with browser available
         run: go test ./... -count=1
 
+  # The Go sidecar must cross-compile to every desktop target we ship, and
+  # compile+vet natively as a Windows package (POSIX-only paths live behind
+  # build tags in pkg/tools).
+  go-cross:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Cross-compile ${{ matrix.goos }}/${{ matrix.goarch }}
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: "0"
+        run: go build ./...
+
+  # Desktop shell on Linux: native GTK/WebKitGTK toolchain, fmt gate and the
+  # headless sidecar lifecycle tests against a real linux sidecar.
+  desktop-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libxdo-dev \
+            file
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build the Go sidecar
+        run: node desktop/scripts/build-sidecar.mjs
+
+      - name: Rustfmt
+        run: cargo fmt --check --manifest-path desktop/Cargo.toml
+
+      - name: Sidecar lifecycle tests
+        run: cargo test --manifest-path desktop/Cargo.toml
+
+  # Desktop shell on Windows: native Go build (build-tag split), the
+  # triple-suffixed sidecar via the Node hook, and cargo check with the real
+  # Tauri/WinSDK toolchain (rc.exe is on the runner).
+  desktop-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Go build and vet (Windows)
+        run: |
+          go build ./...
+          go vet ./...
+
+      - name: Build the Go sidecar
+        run: node desktop\scripts\build-sidecar.mjs
+
+      - name: Cargo check
+        working-directory: desktop
+        run: cargo check --locked
+
   # Desktop UI: the Vite output web/dist is committed and embedded into the
   # Go binary. This job rebuilds from source and fails if the committed tree
   # drifts, then proves a Go-only build embeds it.

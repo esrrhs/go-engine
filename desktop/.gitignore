@@ -5,7 +5,7 @@ node_modules/
 target/
 gen/schemas/
 
-# Sidecar binaries are rebuilt from ../cmd/divvy by scripts/build-sidecar.sh
+# Sidecar binaries are rebuilt from ../cmd/divvy by scripts/build-sidecar.mjs
 binaries/divvy-sidecar-*
 
 # Local logs

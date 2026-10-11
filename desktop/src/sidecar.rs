@@ -17,6 +17,7 @@ use tauri::Manager;
 const DEFAULT_DEV_SIDECAR_PORT: &str = "8799";
 const DEFAULT_STARTUP_TIMEOUT_MS: u64 = 30_000;
 /// Let the Go server run its SIGINT checkpoint path (its own grace is 10s).
+#[cfg(unix)]
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(12);
 
 pub(crate) struct SidecarState {
@@ -100,7 +101,7 @@ pub(crate) fn resolve_sidecar(app: &tauri::AppHandle) -> Result<PathBuf, String>
         }
     }
     Err(format!(
-        "未找到 divvy 后端程序，已尝试：{}\n请先运行 desktop/scripts/build-sidecar.sh（tauri dev / tauri build 会自动构建）。",
+        "未找到 divvy 后端程序，已尝试：{}\n请先运行 node desktop/scripts/build-sidecar.mjs（tauri dev / tauri build 会自动构建）。",
         candidates
             .iter()
             .map(|c| c.display().to_string())
@@ -125,6 +126,7 @@ fn sidecar_name() -> String {
         ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
         ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
         ("windows", "x86_64") => "x86_64-pc-windows-msvc",
+        ("windows", "aarch64") => "aarch64-pc-windows-msvc",
         (os, arch) => panic!("unsupported sidecar platform: {os}/{arch}"),
     };
     let mut name = format!("divvy-sidecar-{triple}");
@@ -181,6 +183,14 @@ pub(crate) fn launch_sidecar(
     {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
+    }
+    // A GUI-subsystem app would otherwise pop a console window for the
+    // sidecar (and every tool child); CREATE_NO_WINDOW keeps it hidden.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
     }
     let mut child = command
         .spawn()
@@ -253,24 +263,34 @@ fn parse_token(url: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Terminate the sidecar and every descendant. taskkill /T walks the
+/// parent-child tree (Go server -> leaf shells -> tool processes), /F
+/// force-terminates; best effort, output suppressed.
+#[cfg(windows)]
+fn kill_process_tree(pid: u32) {
+    let _ = std::process::Command::new("taskkill")
+        .args(["/F", "/T", "/PID", &pid.to_string()])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
+
 impl SidecarProc {
     fn graceful_shutdown(&self) {
-        // Unix: ask for graceful shutdown (whole group) so the Go server
-        // checkpoints running sessions.
         #[cfg(unix)]
-        unsafe {
-            // Negative pid targets the sidecar's own process group.
-            libc::kill(-(self.pid as i32), libc::SIGINT);
-        }
-        // Windows has no SIGINT: std::process::kill is TerminateProcess, so
-        // there is no checkpoint path; the grace wait below is skipped by
-        // starting the kill immediately (Windows is not a supported target
-        // in this release, see spec Non-Goals).
+        self.graceful_shutdown_unix();
         #[cfg(windows)]
-        if let Ok(mut child) = self.child.lock() {
-            let _ = child.start_kill();
-            let _ = child.wait();
-            return;
+        self.graceful_shutdown_windows();
+    }
+
+    /// Unix: SIGINT the whole group first so the Go server checkpoints
+    /// running sessions, then SIGKILL the group after a bounded wait.
+    #[cfg(unix)]
+    fn graceful_shutdown_unix(&self) {
+        // Negative pid targets the sidecar's own process group.
+        unsafe {
+            libc::kill(-(self.pid as i32), libc::SIGINT);
         }
 
         let deadline = Instant::now() + SHUTDOWN_GRACE;
@@ -289,13 +309,24 @@ impl SidecarProc {
         }
 
         eprintln!("[shell] sidecar did not exit in grace; force killing group");
-        #[cfg(unix)]
         unsafe {
             // Kill the whole group: a leaf tool that missed the Go server's
             // own cleanup must not be reparented to launchd as an orphan.
             libc::kill(-(self.pid as i32), libc::SIGKILL);
         }
         let _ = child.wait();
+    }
+
+    /// Windows: a GUI-subsystem app has no shared console for Ctrl events,
+    /// so there is no SIGINT checkpoint handshake. Terminate the whole
+    /// process tree immediately; sessions resume from their last checkpoint
+    /// on the next launch.
+    #[cfg(windows)]
+    fn graceful_shutdown_windows(&self) {
+        kill_process_tree(self.pid);
+        if let Ok(mut child) = self.child.lock() {
+            let _ = child.wait();
+        }
     }
 
     /// Force-stop after a failed startup (no window will be shown).
@@ -305,8 +336,8 @@ impl SidecarProc {
             unsafe {
                 libc::kill(-(self.pid as i32), libc::SIGKILL);
             }
-            #[cfg(not(unix))]
-            let _ = child.kill();
+            #[cfg(windows)]
+            kill_process_tree(self.pid);
             let _ = child.wait();
         }
     }
@@ -319,7 +350,11 @@ impl SidecarProc {
     }
 }
 
-#[cfg(test)]
+// Lifecycle tests rely on POSIX shells, pgrep and process-group
+// semantics, so they run on Unix hosts (macOS/Linux CI). Windows
+// termination is tree-kill by taskkill and is covered by the shared
+// compile gate (cargo check --target *-windows-msvc).
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::io::Write;
@@ -377,7 +412,9 @@ mod tests {
     #[test]
     fn launch_parse_and_graceful_shutdown() {
         let Some(bin) = sidecar_bin() else {
-            eprintln!("skip: sidecar binary not built (run desktop/scripts/build-sidecar.sh)");
+            eprintln!(
+                "skip: sidecar binary not built (run node desktop/scripts/build-sidecar.mjs)"
+            );
             return;
         };
         let (data, work) = temp_dirs("ok");
