@@ -361,3 +361,21 @@
 - **Acceptance Criteria Addressed**: NFR-5 延迟条款（常规操作端到端 <1s）
 - **Test Requirements**:
   - `rule` TR-17.1: 延迟断言必须测量真实 SSE 交付（收到帧），而非函数调用返回；必须区分 live 帧与开窗补发。证据：`TestSSE_LiveEventLatencyUnderSecond` 实测 0.86ms。
+
+## Task 18: 长任务树虚拟列表（窗口化渲染，零依赖）+ 两个实测暴露问题的修复
+- **Status**: `completed`
+- **Priority**: medium
+- **Depends On**: Task 17
+- **背景**: Task 15 已在 200 节点（折叠 11 行、全展开 200 行）规模实测流畅，但 TaskTreeView 仍是全量平铺渲染，DOM 随节点总数线性增长。本切片把规模余量提升到 1000+ 节点：以零依赖窗口化（virtual list）保证挂载行数只与视口相关，并在真实浏览器实测中收口两个被暴露的问题（自动折叠节点首击不展开；Start 失败时沙箱清理 panic）。
+- **Completion Evidence**:
+  - `web/src/components/TaskTreeView.tsx`：重写渲染层为窗口化列表——`traverse`+折叠过滤后的可见行数组上构建前缀偏移（Float64Array，行高按节点 id 缓存，未测过的行用估计值、挂载后 `useLayoutEffect` 测量并一次重渲染收敛），二分定位 `scrollTop ± OVERSCAN(600px)` 窗口，仅挂载相交行（绝对定位到总高画布拉出滚动条）；ResizeObserver 跟踪视口高；行高缓存跨滚动保留、跨 SSE 树替换按 id 自愈。选择/展开语义、role=tree/treeitem/aria-selected/aria-expanded、失败行错误段全部保留。行节奏 2px（ROW_GAP，等价旧 space-y-0.5）。
+  - `web/src/components/CenterMain.tsx`：滚动源移交 TaskTreeView（窗口化必须自持 scroll 容器），外层 div 不再 overflow-y-auto。
+  - **修复真实交互 bug（旧代码遗留）**：旧 `toggle(id)` 写 `manualCollapsed[id] = !manualCollapsed[id]`，而对「COMPLETED+integration_verified 自动折叠」的节点该值为 undefined，`!undefined===true`——第一次点击反而显式折叠，必须点两次才展开。提取模块级 `autoCollapsed(n)`，toggle 改为翻转**生效中**状态 `!(m[id] ?? autoCollapsed(n))`，首击即展开、再击折叠。
+  - **修复沙箱清理 panic（全量 -race 闸门实测暴露）**：`pkg/tools/sandbox.go` RunBash 的进程组清理 defer 与 `cmd.Cancel` 直接解引用 `cmd.Process.Pid`；当 `cmd.Start` 失败（如高负载 fork 失败、工作目录已被删）时 Process 为 nil，defer panic 掩盖真正的启动错误（全量 -race 跑 server 包时实测崩溃在 verify→RunBash 链路上）。两处均加 nil 防护，Start 错误正常经「failed to start」路径返回。新增 `pkg/tools/sandbox_startfail_test.go`：Root 指向不存在目录时 RunBash 必须返回 error 而非 panic（已验证旧代码 panic、修复后 `-count=3` 绿）。
+  - 浏览器实测（临时 serve + 1021 节点夹具：root+20 复合×50 叶子，含失败/运行中/验收中混合态、长错误信息行；夹具与生成器用后即删）：注入固定 1280×800 视口（离屏标签零尺寸会使 rAF/布局失真，已在方法中规避）；折叠态（c19 自动折叠，971 可见行）挂载 **19** 行；展开后画布总高约 55.2-59.4k px（随行高缓存收敛），在 scrollTop=0/20000/30000/40000/底部各位置挂载行恒定 **19/30/29/19**（界于 15-35，绝不随 1021 增长）；相邻挂载行 gaps 全空，视口内无空白（仅 2px 行节奏缝与上下 8px padding）；底部最后一行 c19_l49 正确可达；中部叶子单击 aria-selected=true；c19 折叠→展开→再折叠往返全部单击生效；行高样本 55-74px（均值 56.2）；JS 堆 6.36-7.33MB；console 无新增错误（仅历史注入脚本报错与 SSE abort 网络噪声，均非产品代码）。
+  - dist 确定性：两次 `npm run build` 逐文件 SHA256 一致——`index-jtm61JMz.js` 208.54KB/gzip 66.69KB、`index-BTBj8hg6.css` 27.64KB；tsc 严格零错误。
+  - 全量闸门：gofmt clean、`go vet`、golangci-lint 0 issues、`go test ./... -race -count=1` exit=0 全包绿（含新增 sandbox 回归）。
+- **Acceptance Criteria Addressed**: NFR-5「虚拟列表或截断加载」在 1000+ 节点（5 倍规格基线）下的实测落地；FR-4 树交互正确性补强
+- **Test Requirements**:
+  - `rule` TR-18.1: 虚拟列表的有界性必须来自真实 DOM 采样而非结构推断：1021 节点全展开后多个滚动位置 `[role=treeitem]` 挂载数恒定有界（实测 19-30），行间无 gap、视口无空白、末行可达。证据：上述浏览器采样 JSON。
+  - `rule` TR-18.2: Start 失败不 panic 必须有确定性回归（缺失 Root → 返回 error）；自动折叠节点首击展开/再击折叠必须有浏览器往返实测。证据：`sandbox_startfail_test.go`（旧代码 panic 已对照）+ 浏览器单击往返结果。

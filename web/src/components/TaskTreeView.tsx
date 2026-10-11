@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { TaskNode, TaskTree } from '../types'
 import { compactTokens, formatDuration, stateMeta, traverse } from '../lib/tree'
 import { useStore } from '../store'
@@ -105,14 +105,61 @@ function NodeRow({ node, collapsed, onToggle }: {
   )
 }
 
+// Auto-collapse fully completed, integration-verified compounds; the user
+// can still toggle them explicitly.
+function autoCollapsed(n: TaskNode): boolean {
+  return (
+    n.type === 'COMPOUND' && n.state === 'COMPLETED' && n.integration_verified === true
+  )
+}
+
+// --- Windowed (virtual) rendering -------------------------------------------
+// Zero-dependency virtualization (NFR-7): the flattened visible list is laid
+// out on a measured-offset canvas and only the rows intersecting the viewport
+// (+ overscan) mount, so the DOM stays bounded no matter how many nodes the
+// tree holds (NFR-5). Heights are measured after mount and cached per node
+// id; unmeasured rows use a close estimate that self-corrects on first paint.
+const ROW_GAP = 2 // rhythm between rows (was space-y-0.5)
+const PAD_Y = 8 // pane padding above/below the row canvas (was py-2)
+const OVERSCAN = 600 // px rendered beyond the viewport in each direction
+const EST_ROW_H = 50 // title line + meta line, before first measurement
+const EST_ERR_H = 30 // extra for a clamped two-line error paragraph
+
+// Smallest i such that offsets[i+1] > pos: first row whose bottom edge lies
+// below pos. offsets has length n+1 with offsets[0] = 0.
+function firstVisible(offsets: Float64Array, n: number, pos: number): number {
+  let lo = 0
+  let hi = n
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (offsets[mid + 1] > pos) hi = mid
+    else lo = mid + 1
+  }
+  return lo
+}
+
+// Smallest j such that offsets[j] >= pos: first row starting at/after pos.
+function endVisible(offsets: Float64Array, n: number, pos: number): number {
+  let lo = 0
+  let hi = n
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (offsets[mid] >= pos) hi = mid
+    else lo = mid + 1
+  }
+  return lo
+}
+
 export function TaskTreeView({ tree }: { tree: TaskTree }) {
   // Default-expanded compound ids. Failed/active branches stay open so the
   // user immediately sees what needs attention; finished branches can fold.
   const nodes = useMemo(() => traverse(tree), [tree])
   const [manualCollapsed, setManualCollapsed] = useState<Record<string, boolean>>({})
 
-  const toggle = (id: string) =>
-    setManualCollapsed((m) => ({ ...m, [id]: !m[id] }))
+  // Flip the EFFECTIVE state: an auto-collapsed row's first click must expand
+  // it (naively flipping an unset flag would write true and need two clicks).
+  const toggle = (n: TaskNode) =>
+    setManualCollapsed((m) => ({ ...m, [n.id]: !(m[n.id] ?? autoCollapsed(n)) }))
 
   const visible = useMemo(() => {
     const collapsedSet = new Set<string>()
@@ -129,26 +176,103 @@ export function TaskTreeView({ tree }: { tree: TaskTree }) {
         pid = tree.nodes[pid]?.parent_id
       }
       if (!hidden) out.push(n)
-      const isCollapsed =
-        manualCollapsed[n.id] ??
-        // Auto-collapse fully completed, integration-verified compounds.
-        (n.type === 'COMPOUND' &&
-          n.state === 'COMPLETED' &&
-          n.integration_verified)
+      const isCollapsed = manualCollapsed[n.id] ?? autoCollapsed(n)
       if (isCollapsed && (n.children_ids?.length ?? 0) > 0) collapsedSet.add(n.id)
     }
     return out
   }, [nodes, manualCollapsed, tree.nodes])
 
-  const isCollapsed = (n: TaskNode) =>
-    manualCollapsed[n.id] ??
-    (n.type === 'COMPOUND' && n.state === 'COMPLETED' && n.integration_verified)
+  const isCollapsed = (n: TaskNode) => manualCollapsed[n.id] ?? autoCollapsed(n)
+
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewportH, setViewportH] = useState(0)
+  // Measured heights persist across scrolling (cache keyed by node id);
+  // rowEls only tracks currently mounted rows for re-measurement.
+  const rowHeights = useRef(new Map<string, number>())
+  const rowEls = useRef(new Map<string, HTMLElement>())
+  const [heightsVer, bumpHeights] = useReducer((x: number) => x + 1, 0)
+
+  // Prefix offsets over the flattened visible list. O(n) per recomputation
+  // is negligible even at 10k rows and keeps the scroll math exact.
+  const offsets = useMemo(() => {
+    const off = new Float64Array(visible.length + 1)
+    for (let i = 0; i < visible.length; i++) {
+      const n = visible[i]
+      const est =
+        n.error_msg && n.state === 'FAILED' ? EST_ROW_H + EST_ERR_H : EST_ROW_H
+      off[i + 1] = off[i] + (rowHeights.current.get(n.id) ?? est) + ROW_GAP
+    }
+    return off
+    // heightsVer bumps whenever a measured height drifts from the cache.
+  }, [visible, heightsVer])
+
+  const total = visible.length
+  const first = firstVisible(offsets, total, scrollTop - OVERSCAN)
+  const last = endVisible(offsets, total, scrollTop + viewportH + OVERSCAN)
+
+  // Track the viewport size so the window covers exactly what is on screen.
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setViewportH(el.clientHeight)
+    const ro = new ResizeObserver(() => setViewportH(el.clientHeight))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  // Re-measure mounted rows on every render: heights converge right after
+  // the row first paints and self-heal when its content (e.g. error text)
+  // changes. The bump settles in one extra render.
+  useLayoutEffect(() => {
+    let changed = false
+    for (const [id, el] of rowEls.current) {
+      const h = el.offsetHeight
+      const prev = rowHeights.current.get(id)
+      if (prev === undefined || Math.abs(prev - h) > 0.5) {
+        rowHeights.current.set(id, h)
+        changed = true
+      }
+    }
+    if (changed) bumpHeights()
+  })
+
+  const rows: number[] = []
+  for (let i = first; i < last; i++) rows.push(i)
 
   return (
-    <div role="tree" className="space-y-0.5 px-3 py-2">
-      {visible.map((n) => (
-        <NodeRow key={n.id} node={n} collapsed={isCollapsed(n)} onToggle={() => toggle(n.id)} />
-      ))}
+    <div
+      ref={scrollRef}
+      role="tree"
+      onScroll={() => setScrollTop(scrollRef.current?.scrollTop ?? 0)}
+      className="h-full overflow-y-auto"
+    >
+      <div
+        role="presentation"
+        className="relative mx-3"
+        style={{ height: offsets[total] + PAD_Y * 2 }}
+      >
+        {rows.map((i) => {
+          const n = visible[i]
+          return (
+            <div
+              key={n.id}
+              ref={(el) => {
+                if (el) rowEls.current.set(n.id, el)
+                else rowEls.current.delete(n.id)
+              }}
+              style={{
+                position: 'absolute',
+                top: PAD_Y + offsets[i],
+                left: 0,
+                right: 0,
+              }}
+            >
+              <NodeRow node={n} collapsed={isCollapsed(n)} onToggle={() => toggle(n)} />
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

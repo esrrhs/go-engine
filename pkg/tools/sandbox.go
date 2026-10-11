@@ -625,7 +625,12 @@ func (s *Sandbox) RunBash(ctx context.Context, command string, timeout time.Dura
 	// makes the timeout ineffective and the leaf hang.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
-		// Negative pid targets the process group.
+		// Negative pid targets the process group. If Start never launched
+		// (e.g. fork failed under load), cmd.Process is nil and there is
+		// nothing to signal.
+		if cmd.Process == nil {
+			return os.ErrProcessDone
+		}
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 	// Give killed processes a moment to be reaped.
@@ -635,8 +640,15 @@ func (s *Sandbox) RunBash(ctx context.Context, command string, timeout time.Dura
 	// group. A background child started in a subshell is reparented to pid 1
 	// while the outer shell returns successfully, so neither a timeout nor
 	// sh's exit would otherwise stop it and the server leaks forever. A normal
-	// foreground command leaves the group empty; ESRCH is ignored.
-	defer func() { _ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }()
+	// foreground command leaves the group empty; ESRCH is ignored. Guard the
+	// nil-Process case (failed Start) so a launch error surfaces instead of
+	// being masked by a panic in the deferred cleanup.
+	defer func() {
+		if cmd.Process == nil {
+			return
+		}
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}()
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = capWriter{w: &stdout, n: s.maxOut()}

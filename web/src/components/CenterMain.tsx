@@ -78,7 +78,9 @@ function SessionView() {
           {tree ? (
             <>
               <TreeHeader />
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              {/* TaskTreeView owns scrolling (windowed rendering needs the
+                  scroll source inside the component). */}
+              <div className="min-h-0 flex-1">
                 <TaskTreeView tree={tree} />
               </div>
             </>
