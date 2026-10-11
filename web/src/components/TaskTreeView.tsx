@@ -106,7 +106,7 @@ function NodeRow({ node, collapsed, onToggle }: {
 }
 
 // --- Windowed (virtual) rendering -------------------------------------------
-// Zero-dependency virtualization (NFR-7): the flattened visible list is laid
+// Zero-dependency virtualization (NFR-5): the flattened visible list is laid
 // out on a measured-offset canvas and only the rows intersecting the viewport
 // (+ overscan) mount, so the DOM stays bounded no matter how many nodes the
 // tree holds (NFR-5). Heights are measured after mount and cached per node
@@ -242,35 +242,37 @@ export function TaskTreeView({ tree }: { tree: TaskTree }) {
         .filter(({ node }) => ATTENTION_STATES.has(node.state)),
     [visible],
   )
-  const [cursorId, setCursorId] = useState<string | null>(null)
-  const cursorIdx = attention.findIndex(({ node }) => node.id === cursorId)
-  // A plain row click that lands on an attention node also positions the label.
-  const selectedAttentionIdx = attention.findIndex(
-    ({ node }) => node.id === selectedNodeId,
-  )
-  const labelPos = cursorIdx >= 0 ? cursorIdx + 1 : selectedAttentionIdx >= 0 ? selectedAttentionIdx + 1 : '–'
+  // The cursor is the store selection itself: quick-find, row clicks and
+  // keyboard navigation all move it, so it can never diverge from the label.
+  const attentionPos = attention.findIndex(({ node }) => node.id === selectedNodeId)
+  const labelPos = attentionPos >= 0 ? attentionPos + 1 : '–'
+  // A jump whose target lands in never-rendered area parks with estimated row
+  // heights; replay it once after measurements converge (see measure effect).
+  const pendingJumpRef = useRef<{ id: string } | null>(null)
+  const parkRow = (index: number) => {
+    const pane = scrollRef.current
+    if (!pane) return
+    const gap = Math.min(80, Math.round(pane.clientHeight / 4))
+    const top = Math.min(
+      Math.max(0, PAD_Y + offsets[index] - gap),
+      Math.max(0, pane.scrollHeight - pane.clientHeight),
+    )
+    pane.scrollTop = top
+    setScrollTop(top)
+  }
   const jumpToAttention = (dir: 1 | -1) => {
     if (attention.length === 0) return
     const len = attention.length
-    let idx = cursorIdx
-    if (idx < 0) idx = selectedAttentionIdx
+    let idx = attentionPos
     if (idx < 0) idx = dir === 1 ? 0 : len - 1
     else idx = (idx + dir + len) % len
     const { node, index } = attention[idx]
-    setCursorId(node.id)
     selectNode(node.id)
-    // Park the row just below the pane top (small breathing gap), never past
-    // the scrollable range. Programmatic only: no anchor is recorded.
-    const pane = scrollRef.current
-    if (pane) {
-      const gap = Math.min(80, Math.round(pane.clientHeight / 4))
-      const top = Math.min(
-        Math.max(0, PAD_Y + offsets[index] - gap),
-        Math.max(0, pane.scrollHeight - pane.clientHeight),
-      )
-      pane.scrollTop = top
-      setScrollTop(top)
-    }
+    // Park the row just below the pane top (small breathing gap). Programmatic
+    // only: no toggle anchor is recorded; a replay is armed in case the target
+    // region had only estimated row heights so far.
+    pendingJumpRef.current = { id: node.id }
+    parkRow(index)
   }
 
   // Minimal scroll so the row at visible index i is inside the viewport: moves
@@ -321,11 +323,22 @@ export function TaskTreeView({ tree }: { tree: TaskTree }) {
   }
 
   // Track the viewport size so the window covers exactly what is on screen.
+  // A width-only change reflows wrapped error text, so cached row heights are
+  // invalidated and remeasured (clientHeight alone may stay identical).
+  const paneWidth = useRef(0)
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
     setViewportH(el.clientHeight)
-    const ro = new ResizeObserver(() => setViewportH(el.clientHeight))
+    paneWidth.current = el.clientWidth
+    const ro = new ResizeObserver(() => {
+      setViewportH(el.clientHeight)
+      if (el.clientWidth !== paneWidth.current) {
+        paneWidth.current = el.clientWidth
+        rowHeights.current.clear()
+        bumpHeights()
+      }
+    })
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -343,7 +356,16 @@ export function TaskTreeView({ tree }: { tree: TaskTree }) {
         changed = true
       }
     }
-    if (changed) bumpHeights()
+    const jump = pendingJumpRef.current
+    if (changed) {
+      bumpHeights()
+    } else if (jump) {
+      // Heights in the jumped-to window have settled: repark against the
+      // measured offsets so estimate drift cannot strand the target row.
+      pendingJumpRef.current = null
+      const idx = visible.findIndex((n) => n.id === jump.id)
+      if (idx >= 0) parkRow(idx)
+    }
   })
 
   // Consume the toggle anchor once, after the pruned/revealed subtree has
