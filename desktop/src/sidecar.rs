@@ -359,6 +359,15 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    /// The tests mutate process-global env vars (ports, startup timeout) and
+    /// spawn executable temp files; serialise them so parallel test threads
+    /// cannot race env overrides or collide on /tmp script names. On Linux an
+    /// execve while another thread still holds the same file O_WRONLY fails
+    /// with ETXTBSY ("Text file busy"), which the pid+nanos naming allowed
+    /// when two tests read the clock on the same tick.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+    static SCRIPT_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
     fn sidecar_bin() -> Option<PathBuf> {
         let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("binaries")
@@ -389,13 +398,15 @@ mod tests {
     }
 
     fn write_script(body: &str) -> PathBuf {
+        let seq = SCRIPT_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
-            "divvy-fake-sidecar-{}-{}.sh",
+            "divvy-fake-sidecar-{}-{}-{}.sh",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+            seq
         ));
         let mut f = std::fs::File::create(&path).unwrap();
         writeln!(f, "#!/bin/sh\n{body}").unwrap();
@@ -411,6 +422,7 @@ mod tests {
     /// and SIGINT shutdown leaves no process behind.
     #[test]
     fn launch_parse_and_graceful_shutdown() {
+        let _guard = TEST_LOCK.lock().unwrap();
         let Some(bin) = sidecar_bin() else {
             eprintln!(
                 "skip: sidecar binary not built (run node desktop/scripts/build-sidecar.mjs)"
@@ -418,13 +430,18 @@ mod tests {
             return;
         };
         let (data, work) = temp_dirs("ok");
-        // Safety: serialise with the dev app (fixed 8799) by using a unique
-        // port, and restore the environment afterwards.
-        let port = format!("89{}", (std::process::id() % 100));
-        std::env::set_var("DIVVY_SIDECAR_PORT", &port);
+        // Ask the OS for an ephemeral high port: a fixed test port collides
+        // across reruns, and a pid-derived scheme ("89{pid%100}") can resolve
+        // to 890-899 (<1024, bind EPERM on Unix). Restore the env afterwards.
+        std::env::set_var("DIVVY_SIDECAR_PORT", "0");
         let launched = launch_sidecar(&bin, &work, &data).expect("sidecar launches");
+        let addr = launched
+            .url
+            .strip_prefix("http://")
+            .and_then(|s| s.split('/').next())
+            .expect("host:port in banner url");
         assert!(
-            launched.url.contains(&format!("127.0.0.1:{port}/")),
+            addr.starts_with("127.0.0.1:"),
             "unexpected url: {}",
             launched.url
         );
@@ -435,7 +452,7 @@ mod tests {
         // The parsed token actually authenticates against the live server.
         use std::io::{Read, Write};
         use std::net::TcpStream;
-        let mut sock = TcpStream::connect(("127.0.0.1", port.parse().unwrap())).unwrap();
+        let mut sock = TcpStream::connect(addr).unwrap();
         write!(
             sock,
             "GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer {}\r\nConnection: close\r\n\r\n",
@@ -463,6 +480,7 @@ mod tests {
     /// reported, no leftover process.
     #[test]
     fn startup_timeout_is_reported_and_killed() {
+        let _guard = TEST_LOCK.lock().unwrap();
         std::env::set_var("DIVVY_SIDECAR_STARTUP_TIMEOUT_MS", "1200");
         std::env::set_var("DIVVY_SIDECAR_PORT", "8811");
         let (data, work) = temp_dirs("timeout");
@@ -492,6 +510,7 @@ mod tests {
     /// error rather than a hang.
     #[test]
     fn early_exit_is_reported() {
+        let _guard = TEST_LOCK.lock().unwrap();
         std::env::set_var("DIVVY_SIDECAR_PORT", "8812");
         let (data, work) = temp_dirs("early");
         let fake = write_script("echo some-garbage-line\nexit 3");
