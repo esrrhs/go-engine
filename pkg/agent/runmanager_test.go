@@ -304,6 +304,11 @@ func TestRunManager_AddInstruction(t *testing.T) {
 // runs one more time, then the run completes.
 func TestRunManager_RedoQueued(t *testing.T) {
 	work, data := t.TempDir(), t.TempDir()
+	// Hold the leaf's first worker turn until the redo has been queued:
+	// without this gate a fast machine can finish the single leaf before the
+	// test observes PhaseRunning (or before /redo lands in the queue), which
+	// made the test timing-dependent.
+	gate := make(chan struct{})
 	var writeCalls int64
 	client := &llm.ScriptedClient{
 		Handle: func(ctx context.Context, req llm.Request) (*llm.Response, error) {
@@ -316,6 +321,11 @@ func TestRunManager_RedoQueued(t *testing.T) {
 			}
 			if reqHasToolResult(req) {
 				return jsonAction("finish", map[string]string{"summary": "done"}), nil
+			}
+			select {
+			case <-gate:
+			case <-ctx.Done():
+				return nil, ctx.Err()
 			}
 			atomic.AddInt64(&writeCalls, 1)
 			return jsonAction("write_file", map[string]string{"path": "out.txt", "content": "x\n"}), nil
@@ -330,10 +340,13 @@ func TestRunManager_RedoQueued(t *testing.T) {
 	if err := h.ApprovePlan(); err != nil {
 		t.Fatal(err)
 	}
+	// The worker is parked on gate, so the run stays in PhaseRunning until we
+	// queue the redo and release it.
 	waitPhase(t, h, PhaseRunning, 5*time.Second)
 	if err := h.Redo(h.Orchestrator().tree.RootID); err != nil {
 		t.Fatalf("redo: %v", err)
 	}
+	close(gate)
 	if err := h.Wait(); err != nil {
 		t.Fatalf("run: %v", err)
 	}
