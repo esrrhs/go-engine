@@ -276,9 +276,13 @@ func TestRunManager_PauseWhileRunning(t *testing.T) {
 // runs after the planned leaves.
 func TestRunManager_AddInstruction(t *testing.T) {
 	work, data := t.TempDir(), t.TempDir()
+	// Park the first leaf so the /add is guaranteed queued while a leaf is
+	// running; otherwise the two fast scripted leaves can finish first and
+	// the buffered line is left without a consumer.
+	gate := make(chan struct{})
 	mgr := NewRunManager()
 	h, err := mgr.Start(mgrCfg(work, data, "test_mgr_add"),
-		fileWritingScript(mgrTwoLeafPlan, nil), SilentLogger())
+		fileWritingScript(mgrTwoLeafPlan, gate), SilentLogger())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,6 +294,7 @@ func TestRunManager_AddInstruction(t *testing.T) {
 	if err := h.AddInstruction("also write an extra marker file"); err != nil {
 		t.Fatalf("add: %v", err)
 	}
+	close(gate)
 	if err := h.Wait(); err != nil {
 		t.Fatalf("run: %v", err)
 	}
