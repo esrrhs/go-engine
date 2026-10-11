@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 	"unicode/utf8"
 )
@@ -602,7 +601,10 @@ func (s *Sandbox) RunBash(ctx context.Context, command string, timeout time.Dura
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	cmd, err := newLeafCommand(ctx, command)
+	if err != nil {
+		return nil, err
+	}
 	cmd.Dir = s.Root
 	if len(s.hiddenEnv) > 0 {
 		drop := make(map[string]bool, len(s.hiddenEnv))
@@ -619,19 +621,19 @@ func (s *Sandbox) RunBash(ctx context.Context, command string, timeout time.Dura
 		}
 		cmd.Env = filtered
 	}
-	// Run the shell in its own process group so a timeout can kill the whole
-	// group, including background children (e.g. a started server). Killing
-	// only sh leaves such children alive and sh waits on them forever, which
-	// makes the timeout ineffective and the leaf hang.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Run the shell in its own process group (POSIX) / hidden console
+	// (Windows) so a timeout can kill the whole shell tree, including
+	// background children (e.g. a started server). Killing only sh leaves
+	// such children alive and sh waits on them forever, which makes the
+	// timeout ineffective and the leaf hang.
+	configureLeafCommand(cmd)
 	cmd.Cancel = func() error {
-		// Negative pid targets the process group. If Start never launched
-		// (e.g. fork failed under load), cmd.Process is nil and there is
-		// nothing to signal.
+		// If Start never launched (e.g. fork failed under load),
+		// cmd.Process is nil and there is nothing to signal.
 		if cmd.Process == nil {
 			return os.ErrProcessDone
 		}
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		return killLeafProcessTree(cmd.Process.Pid)
 	}
 	// Give killed processes a moment to be reaped.
 	cmd.WaitDelay = 2 * time.Second
@@ -647,14 +649,14 @@ func (s *Sandbox) RunBash(ctx context.Context, command string, timeout time.Dura
 		if cmd.Process == nil {
 			return
 		}
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		_ = killLeafProcessTree(cmd.Process.Pid)
 	}()
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = capWriter{w: &stdout, n: s.maxOut()}
 	cmd.Stderr = capWriter{w: &stderr, n: s.maxOut()}
 
-	err := cmd.Run()
+	err = cmd.Run()
 	res := &ExecResult{
 		Stdout: stdout.String(),
 		Stderr: stderr.String(),
