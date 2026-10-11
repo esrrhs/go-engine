@@ -1,6 +1,6 @@
-import { useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { TaskNode, TaskTree } from '../types'
-import { compactTokens, formatDuration, stateMeta, traverse } from '../lib/tree'
+import { autoCollapsed, compactTokens, flattenVisible, formatDuration, stateMeta } from '../lib/tree'
 import { useStore } from '../store'
 import { BranchIcon, CheckIcon, DocIcon, SpinnerIcon, XIcon } from './icons'
 
@@ -105,14 +105,6 @@ function NodeRow({ node, collapsed, onToggle }: {
   )
 }
 
-// Auto-collapse fully completed, integration-verified compounds; the user
-// can still toggle them explicitly.
-function autoCollapsed(n: TaskNode): boolean {
-  return (
-    n.type === 'COMPOUND' && n.state === 'COMPLETED' && n.integration_verified === true
-  )
-}
-
 // --- Windowed (virtual) rendering -------------------------------------------
 // Zero-dependency virtualization (NFR-7): the flattened visible list is laid
 // out on a measured-offset canvas and only the rows intersecting the viewport
@@ -150,43 +142,73 @@ function endVisible(offsets: Float64Array, n: number, pos: number): number {
   return lo
 }
 
+// States that demand the supervisor's attention; the quick-find controls walk
+// visible nodes in these states in visible order.
+const ATTENTION_STATES = new Set(['FAILED', 'RUNNING', 'VERIFYING', 'DECOMPOSING'])
+
 export function TaskTreeView({ tree }: { tree: TaskTree }) {
-  // Default-expanded compound ids. Failed/active branches stay open so the
-  // user immediately sees what needs attention; finished branches can fold.
-  const nodes = useMemo(() => traverse(tree), [tree])
+  // Failed/active branches stay open so the user immediately sees what needs
+  // attention; finished+verified branches auto-fold (see flattenVisible).
   const [manualCollapsed, setManualCollapsed] = useState<Record<string, boolean>>({})
+  const selectedNodeId = useStore((s) => s.selectedNodeId)
+  const selectNode = useStore((s) => s.selectNode)
+
+  // Viewport anchor for collapse/expand (AC-7): the toggled row must keep its
+  // distance from the pane top. A node's own canvas offset cannot move when
+  // its descendants are revealed or pruned (they sit below it); the real
+  // disturbance is the browser clamping scrollTop after a prune shrinks the
+  // canvas. The anchor is captured here and consumed once in a layout effect.
+  // Only toggle sets it, so programmatic scrolling (quick find) never anchors.
+  const anchorRef = useRef<{ id: string; viewportTop: number } | null>(null)
 
   // Flip the EFFECTIVE state: an auto-collapsed row's first click must expand
   // it (naively flipping an unset flag would write true and need two clicks).
-  const toggle = (n: TaskNode) =>
-    setManualCollapsed((m) => ({ ...m, [n.id]: !(m[n.id] ?? autoCollapsed(n)) }))
-
-  const visible = useMemo(() => {
-    const collapsedSet = new Set<string>()
-    const out: TaskNode[] = []
-    for (const n of nodes) {
-      // Hidden if any ancestor is collapsed.
-      let hidden = false
-      let pid = n.parent_id
-      while (pid) {
-        if (collapsedSet.has(pid)) {
-          hidden = true
-          break
-        }
-        pid = tree.nodes[pid]?.parent_id
+  const toggle = (n: TaskNode) => {
+    const pane = scrollRef.current
+    const rowEl = rowEls.current.get(n.id)
+    if (pane && rowEl) {
+      anchorRef.current = {
+        id: n.id,
+        viewportTop:
+          rowEl.getBoundingClientRect().top - pane.getBoundingClientRect().top,
       }
-      if (!hidden) out.push(n)
-      const isCollapsed = manualCollapsed[n.id] ?? autoCollapsed(n)
-      if (isCollapsed && (n.children_ids?.length ?? 0) > 0) collapsedSet.add(n.id)
+    } else {
+      anchorRef.current = null
     }
-    return out
-  }, [nodes, manualCollapsed, tree.nodes])
+    setManualCollapsed((m) => ({ ...m, [n.id]: !(m[n.id] ?? autoCollapsed(n)) }))
+  }
+
+  // One iterative O(n) DFS: ordering and collapsed-subtree pruning live in
+  // the pure lib function so deep chains cannot blow the call stack or cost
+  // O(n*depth).
+  const visible = useMemo(
+    () => flattenVisible(tree, manualCollapsed),
+    [tree, manualCollapsed],
+  )
 
   const isCollapsed = (n: TaskNode) => manualCollapsed[n.id] ?? autoCollapsed(n)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [viewportH, setViewportH] = useState(0)
+  // Trackpads/wheels emit 200+ scroll events per second. Coalesce them to at
+  // most one state commit per animation frame: events just ensure a frame is
+  // scheduled; the frame reads the then-latest scrollTop.
+  const scrollRaf = useRef(0)
+  const onScroll = () => {
+    if (scrollRaf.current !== 0) return
+    scrollRaf.current = requestAnimationFrame(() => {
+      scrollRaf.current = 0
+      setScrollTop(scrollRef.current?.scrollTop ?? 0)
+    })
+  }
+  // A pending frame must not touch state after the pane unmounted.
+  useEffect(
+    () => () => {
+      if (scrollRaf.current !== 0) cancelAnimationFrame(scrollRaf.current)
+    },
+    [],
+  )
   // Measured heights persist across scrolling (cache keyed by node id);
   // rowEls only tracks currently mounted rows for re-measurement.
   const rowHeights = useRef(new Map<string, number>())
@@ -210,6 +232,93 @@ export function TaskTreeView({ tree }: { tree: TaskTree }) {
   const total = visible.length
   const first = firstVisible(offsets, total, scrollTop - OVERSCAN)
   const last = endVisible(offsets, total, scrollTop + viewportH + OVERSCAN)
+
+  // Quick find (AC-8): visible attention nodes in visible order, with a cursor
+  // that survives snapshot replacements as long as its node still exists.
+  const attention = useMemo(
+    () =>
+      visible
+        .map((node, index) => ({ node, index }))
+        .filter(({ node }) => ATTENTION_STATES.has(node.state)),
+    [visible],
+  )
+  const [cursorId, setCursorId] = useState<string | null>(null)
+  const cursorIdx = attention.findIndex(({ node }) => node.id === cursorId)
+  // A plain row click that lands on an attention node also positions the label.
+  const selectedAttentionIdx = attention.findIndex(
+    ({ node }) => node.id === selectedNodeId,
+  )
+  const labelPos = cursorIdx >= 0 ? cursorIdx + 1 : selectedAttentionIdx >= 0 ? selectedAttentionIdx + 1 : '–'
+  const jumpToAttention = (dir: 1 | -1) => {
+    if (attention.length === 0) return
+    const len = attention.length
+    let idx = cursorIdx
+    if (idx < 0) idx = selectedAttentionIdx
+    if (idx < 0) idx = dir === 1 ? 0 : len - 1
+    else idx = (idx + dir + len) % len
+    const { node, index } = attention[idx]
+    setCursorId(node.id)
+    selectNode(node.id)
+    // Park the row just below the pane top (small breathing gap), never past
+    // the scrollable range. Programmatic only: no anchor is recorded.
+    const pane = scrollRef.current
+    if (pane) {
+      const gap = Math.min(80, Math.round(pane.clientHeight / 4))
+      const top = Math.min(
+        Math.max(0, PAD_Y + offsets[index] - gap),
+        Math.max(0, pane.scrollHeight - pane.clientHeight),
+      )
+      pane.scrollTop = top
+      setScrollTop(top)
+    }
+  }
+
+  // Minimal scroll so the row at visible index i is inside the viewport: moves
+  // only when it is above or below the current view (plus a small gap).
+  const ensureIndexVisible = (i: number) => {
+    const pane = scrollRef.current
+    if (!pane || i < 0 || i >= total) return
+    const canvasTop = PAD_Y + offsets[i]
+    const rowBottom = PAD_Y + offsets[i + 1] - ROW_GAP
+    const gap = 12
+    let want = pane.scrollTop
+    if (canvasTop < want + gap) want = canvasTop - gap
+    else if (rowBottom > want + pane.clientHeight - gap) {
+      want = rowBottom - pane.clientHeight + gap
+    }
+    want = Math.min(Math.max(0, want), Math.max(0, pane.scrollHeight - pane.clientHeight))
+    if (want !== pane.scrollTop) {
+      pane.scrollTop = want
+      setScrollTop(want)
+    }
+  }
+
+  // Keyboard navigation (AC-9): arrows move selection along the visible order;
+  // right/left expand/collapse compounds through the same anchored toggle path
+  // as the mouse. Boundary presses are no-ops (no wrap). Only active while the
+  // tree pane itself holds focus.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (total === 0) return
+    const idx = visible.findIndex((n) => n.id === selectedNodeId)
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const i =
+        e.key === 'ArrowDown'
+          ? Math.min(total - 1, idx < 0 ? 0 : idx + 1)
+          : Math.max(0, idx < 0 ? total - 1 : idx - 1)
+      selectNode(visible[i].id)
+      ensureIndexVisible(i)
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      if (idx < 0) return
+      const n = visible[idx]
+      if ((n.children_ids?.length ?? 0) === 0) return
+      const collapsed = isCollapsed(n)
+      if ((e.key === 'ArrowRight' && collapsed) || (e.key === 'ArrowLeft' && !collapsed)) {
+        e.preventDefault()
+        toggle(n)
+      }
+    }
+  }
 
   // Track the viewport size so the window covers exactly what is on screen.
   useLayoutEffect(() => {
@@ -237,16 +346,72 @@ export function TaskTreeView({ tree }: { tree: TaskTree }) {
     if (changed) bumpHeights()
   })
 
+  // Consume the toggle anchor once, after the pruned/revealed subtree has
+  // committed: put the toggled row back at its pre-toggle viewport position.
+  // Rows above it never change identity on toggle, so this only corrects the
+  // browser's scrollTop clamp against the shrunken canvas. One-shot: later
+  // snapshots/scrolling must not re-trigger compensation (TR-4.2).
+  useLayoutEffect(() => {
+    const a = anchorRef.current
+    const pane = scrollRef.current
+    if (!a || !pane) return
+    anchorRef.current = null
+    if (!visible.some((n) => n.id === a.id)) return
+    const rowEl = rowEls.current.get(a.id)
+    if (!rowEl) return
+    const current =
+      rowEl.getBoundingClientRect().top - pane.getBoundingClientRect().top
+    const delta = Math.round(current - a.viewportTop)
+    if (Math.abs(delta) <= 2) return
+    const max = Math.max(0, pane.scrollHeight - pane.clientHeight)
+    const next = Math.min(Math.max(0, pane.scrollTop + delta), max)
+    pane.scrollTop = next
+    setScrollTop(next)
+  })
+
   const rows: number[] = []
   for (let i = first; i < last; i++) rows.push(i)
 
   return (
-    <div
-      ref={scrollRef}
-      role="tree"
-      onScroll={() => setScrollTop(scrollRef.current?.scrollTop ?? 0)}
-      className="h-full overflow-y-auto"
-    >
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 items-center gap-2 border-b border-line bg-ink-850/40 px-3 py-1 text-[11.5px]">
+        <button
+          type="button"
+          onClick={() => jumpToAttention(-1)}
+          disabled={attention.length === 0}
+          title="定位上一个失败/进行中节点（到首后回绕到末尾）"
+          className="rounded border border-line px-1.5 py-0.5 text-slate-400 hover:bg-ink-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ‹ 上一个
+        </button>
+        <button
+          type="button"
+          onClick={() => jumpToAttention(1)}
+          disabled={attention.length === 0}
+          title="定位下一个失败/进行中节点（到末尾后回绕到首个）"
+          className="rounded border border-line px-1.5 py-0.5 text-slate-400 hover:bg-ink-800 hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          下一个 ›
+        </button>
+        {attention.length > 0 ? (
+          <span className="text-slate-500">
+            失败/进行中{' '}
+            <span className="font-mono text-slate-300">
+              {labelPos}/{attention.length}
+            </span>
+          </span>
+        ) : (
+          <span className="text-slate-600">无失败/进行中节点</span>
+        )}
+      </div>
+      <div
+        ref={scrollRef}
+        role="tree"
+        tabIndex={0}
+        onScroll={onScroll}
+        onKeyDown={onKeyDown}
+        className="min-h-0 flex-1 overflow-y-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-brand-600/70"
+      >
       <div
         role="presentation"
         className="relative mx-3"
@@ -272,6 +437,7 @@ export function TaskTreeView({ tree }: { tree: TaskTree }) {
             </div>
           )
         })}
+      </div>
       </div>
     </div>
   )

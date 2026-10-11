@@ -51,6 +51,21 @@ function WindowedText({ lines }: { lines: string[] }) {
   const els = useRef(new Map<number, HTMLElement>())
   const [heightsVer, bumpHeights] = useReducer((x: number) => x + 1, 0)
   const widthRef = useRef(0)
+  // Coalesce scroll events to one state commit per animation frame.
+  const scrollRaf = useRef(0)
+  const onScroll = () => {
+    if (scrollRaf.current !== 0) return
+    scrollRaf.current = requestAnimationFrame(() => {
+      scrollRaf.current = 0
+      setScrollTop(scrollRef.current?.scrollTop ?? 0)
+    })
+  }
+  useEffect(
+    () => () => {
+      if (scrollRaf.current !== 0) cancelAnimationFrame(scrollRaf.current)
+    },
+    [],
+  )
 
   // Line indices are only meaningful for the current file content.
   const linesKey = useMemo(() => lines.length, [lines])
@@ -113,7 +128,7 @@ function WindowedText({ lines }: { lines: string[] }) {
     <div
       ref={scrollRef}
       data-file-scroll
-      onScroll={() => setScrollTop(scrollRef.current?.scrollTop ?? 0)}
+      onScroll={onScroll}
       className="min-h-0 flex-1 overflow-auto bg-ink-950/60"
     >
       <div role="presentation" className="relative font-mono text-[12px] leading-[1.6]">

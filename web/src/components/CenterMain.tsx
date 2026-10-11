@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useStore } from '../store'
 import type { StreamEvent } from '../types'
 import { compactTokens, treeStats } from '../lib/tree'
@@ -14,7 +14,10 @@ import { BranchIcon, TerminalIcon } from './icons'
 
 function TreeHeader() {
   const tree = useStore((s) => s.tree)!
-  const s = treeStats(tree)
+  // SessionView also subscribes to the events stream, so this header rerenders
+  // on every unrelated event. Memoizing keeps the O(n) stats scan tied to the
+  // tree reference alone (snapshots replace it; plain events do not).
+  const s = useMemo(() => treeStats(tree), [tree])
   return (
     <div className="flex shrink-0 items-center gap-3 border-b border-line bg-ink-850/60 px-4 py-2 text-[11.5px] text-slate-500">
       <BranchIcon width={13} height={13} className="text-slate-500" />
