@@ -28,6 +28,7 @@ func (o *Orchestrator) verify(ctx context.Context, sb *tools.Sandbox, node *mode
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
+	cmds = o.retargetCommands(cmds, sb)
 
 	var combined strings.Builder
 	for _, cmd := range cmds {
@@ -103,6 +104,35 @@ func (o *Orchestrator) verify(ctx context.Context, sb *tools.Sandbox, node *mode
 		}
 	}
 	return VerifyResult{OK: true, Output: combined.String()}
+}
+
+// retargetCommands rewrites absolute workspace paths baked into DoD commands
+// so they point at the sandbox the command is actually executed in.
+//
+// Why: the decomposer only ever sees the shared workspace, so models routinely
+// emit DoD commands like "cd /workspace && go test ./...". A leaf then runs in
+// an isolated mirror whose sandbox cwd is already correct, but that explicit cd
+// overrides it and verification silently inspects the *unmodified* workspace —
+// Go answers "matched no packages", the DoD can never pass, the mirror never
+// merges, and every retry burns budget on a failure unrelated to the code.
+//
+// Replacing the root prefix (rather than stripping the cd) keeps subpaths
+// meaningful: "cd /workspace/internal" becomes the mirror's internal. It is a
+// no-op whenever the sandbox IS the workspace, so non-isolated runs, goal-level
+// acceptance and bare unit callers keep their current behaviour.
+func (o *Orchestrator) retargetCommands(cmds []string, sb *tools.Sandbox) []string {
+	if o.sandbox == nil || sb == nil {
+		return cmds
+	}
+	ws := o.sandbox.Root
+	if ws == "" || ws == sb.Root {
+		return cmds
+	}
+	out := make([]string, 0, len(cmds))
+	for _, cmd := range cmds {
+		out = append(out, strings.ReplaceAll(cmd, ws, sb.Root))
+	}
+	return out
 }
 
 // looksLikeExpectationPhrase reports whether an unmatched expected_output is

@@ -82,6 +82,85 @@ func TestVerifyExpectedOutputAcrossCommands(t *testing.T) {
 	}
 }
 
+// TestVerify_DoDAbsoluteWorkspacePathRetargeted is the regression test for
+// isolated leaves whose DoD commands hard-code the shared workspace path.
+//
+// The decomposer only ever sees the shared workspace, so a model routinely
+// emits "cd /workspace && go test ./...". A leaf then runs inside an isolated
+// mirror whose sandbox cwd is correct, but the explicit cd overrides it and
+// verification silently inspects the *unmodified* workspace: Go reports
+// "matched no packages", the DoD can never pass, the mirror never merges, and
+// every retry burns budget on a failure unrelated to the code.
+func TestVerify_DoDAbsoluteWorkspacePathRetargeted(t *testing.T) {
+	ws, err := tools.NewSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, err := tools.NewSandbox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Same file name, different content: whichever tree the command lands in
+	// is unambiguous from the output.
+	if err := ws.WriteFile("marker.txt", "workspace"); err != nil {
+		t.Fatal(err)
+	}
+	if err := leaf.WriteFile("marker.txt", "leaf"); err != nil {
+		t.Fatal(err)
+	}
+	// A subdirectory proves subpaths survive retargeting (a leaf whose DoD
+	// cds into a package dir must land in the mirror's copy of it).
+	if err := leaf.WriteFile("sub/inner.txt", "leaf-sub"); err != nil {
+		t.Fatal(err)
+	}
+
+	o := &Orchestrator{log: SilentLogger(), sandbox: ws}
+
+	// Isolated leaf: the baked-in workspace path must be followed into the
+	// mirror, so the command sees the leaf's files.
+	node := &models.TaskNode{DoD: models.DoD{
+		Commands:       []string{"cd " + ws.Root + " && cat marker.txt"},
+		ExpectedOutput: "leaf",
+		TimeoutSec:     10,
+	}}
+	if vr := o.verify(context.Background(), leaf, node); !vr.OK {
+		t.Fatalf("isolated leaf must verify in its own sandbox, got:\n%s", vr.Output)
+	}
+
+	// Subpath form: "cd <workspace>/sub" has to reach the mirror's sub.
+	node.DoD = models.DoD{
+		Commands:       []string{"cd " + ws.Root + "/sub && cat inner.txt"},
+		ExpectedOutput: "leaf-sub",
+		TimeoutSec:     10,
+	}
+	if vr := o.verify(context.Background(), leaf, node); !vr.OK {
+		t.Fatalf("subpath cd must retarget into the mirror, got:\n%s", vr.Output)
+	}
+
+	// Non-isolated run: sandbox IS the workspace, so behaviour is unchanged
+	// (the command keeps pointing at the shared workspace).
+	node.DoD = models.DoD{
+		Commands:       []string{"cd " + ws.Root + " && cat marker.txt"},
+		ExpectedOutput: "workspace",
+		TimeoutSec:     10,
+	}
+	if vr := o.verify(context.Background(), ws, node); !vr.OK {
+		t.Fatalf("non-isolated verify must still run in the workspace, got:\n%s", vr.Output)
+	}
+
+	// No orchestrator sandbox (unit-callers construct a bare Orchestrator):
+	// must not panic and must leave the command untouched.
+	bare := &Orchestrator{log: SilentLogger()}
+	node.DoD = models.DoD{
+		Commands:       []string{"cd " + ws.Root + " && cat marker.txt"},
+		ExpectedOutput: "workspace",
+		TimeoutSec:     10,
+	}
+	if vr := bare.verify(context.Background(), ws, node); !vr.OK {
+		t.Fatalf("bare orchestrator must not rewrite commands, got:\n%s", vr.Output)
+	}
+}
+
 func TestDefaultDoDCommands_ByProject(t *testing.T) {
 	cases := []struct {
 		proj    tools.ProjectType
