@@ -221,3 +221,37 @@ func TestOmitEmptyKeepsTreeJSONSmall(t *testing.T) {
 		}
 	}
 }
+
+// TestStallRun pins the semantics the stall detector depends on: only the
+// trailing run of records sharing the newest fingerprint counts, and legacy
+// records (empty fingerprint, written before the field existed) never start
+// or extend a run — resuming an old session must not look "stalled".
+func TestStallRun(t *testing.T) {
+	rec := func(fp string) ErrorRecord { return ErrorRecord{Error: "e: " + fp, Fingerprint: fp} }
+
+	cases := []struct {
+		name    string
+		history []ErrorRecord
+		want    int
+	}{
+		{"nil history", nil, 0},
+		{"empty history", []ErrorRecord{}, 0},
+		{"single record", []ErrorRecord{rec("a")}, 1},
+		{"all same fingerprint", []ErrorRecord{rec("a"), rec("a"), rec("a")}, 3},
+		{"trailing run only counts", []ErrorRecord{rec("a"), rec("b"), rec("b")}, 2},
+		{"newest is legacy record", []ErrorRecord{rec("a"), rec("a"), rec("")}, 0},
+		{"legacy in the middle breaks the run", []ErrorRecord{rec("a"), rec(""), rec("a"), rec("a")}, 2},
+		{"alternating fingerprints", []ErrorRecord{rec("a"), rec("b"), rec("a"), rec("b")}, 1},
+	}
+	for _, tc := range cases {
+		n := &TaskNode{ErrorHistory: tc.history}
+		if got := n.StallRun(); got != tc.want {
+			t.Errorf("%s: StallRun() = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+
+	var nilNode *TaskNode
+	if got := nilNode.StallRun(); got != 0 {
+		t.Errorf("nil node StallRun() = %d, want 0", got)
+	}
+}
