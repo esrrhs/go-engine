@@ -114,6 +114,16 @@ NewFromGoal / Load
 
 事件汇总由 `agent.SummarizeEvents` 完成（无法解析的行只计数、不中断解析）；`-prune -keep N` 清理旧会话（含其日志与事件流），`LATEST` 指向的会话永不删，`-dry-run` 可先看清单。
 
+## 联网抓取的地址策略
+
+`-web` 下的 `web_fetch` / `http_request` / `download_file` 遵守同一条策略：只允许 http/https；只允许 80/443；目标解析后不得是回环/私网/链路本地/CGNAT/保留段（`tools.isPublicIP` 显式覆盖 Go `net.IP` 谓词漏掉的非全局可路由范围：NAT64 `64:ff9b::/96`、TEST-NET、`240.0.0.0/4`、广播地址等）；每一跳重定向都重新校验。
+
+**不变量：策略在 dial 时强制执行。** transport 的 `DialContext`（`policyTransport`）在建立连接的瞬间重新解析、校验、并直连其中之一是校验过的 IP。只在请求前校验 URL 不够——重绑定 DNS 可以让校验时看到公网 IP、实际连接时解析到内网 IP（TOCTOU）。检查放进 dialer 后，"通过校验的地址就是被连接的地址"对初始请求和全部重定向同时成立。`validateURL` 仍然保留在请求前，只为 fail-fast 与清晰错误；真正的保证在 dialer。`-search-url` 的检索端点由操作者显式配置，与 `AllowLocal` 同级信任（自建 SearXNG 常在内网），使用独立的 `searchClient`，不走该策略。
+
+## 弱模型基准
+
+`cmd/bench`（`divvy-bench`）把"引擎在弱模型上真的能用"变成可重复度量：固定的小目标语料库 × 真实 OpenAI-compatible 端点（默认本机 Ollama），每目标在全新工作区跑完整流程并报告成功率/token/耗时/引擎失败计数器。语料、指标与参考数字见 [weak-model-bench.md](weak-model-bench.md)。
+
 ## 扩展点
 
 ### 加一个工具

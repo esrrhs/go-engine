@@ -146,7 +146,9 @@ export OPENAI_MODEL=qwen2.5-coder:14b
 - 留空：内置 **DuckDuckGo lite**，无需 API Key（仅解析公开 HTML，可能被网络策略拦截）。
 - **SearXNG**：`-search-url 'http://host/search?q={query}&format=json'`，走 JSON，适合自建稳定检索。
 
-安全约束（web_fetch、download_file 与每一跳重定向都会执行）：只允许 http/https；目标域名解析后若指向回环/私网/链路本地/CGNAT 等非公开地址一律拒绝；只允许 80/443；重定向到内网同样拦截。因此 agent 无法借抓取或下载访问本机或内网服务。
+安全约束（web_fetch、download_file 与每一跳重定向都会执行）：只允许 http/https；目标域名解析后若指向回环/私网/链路本地/CGNAT/保留段（含 NAT64、TEST-NET、240.0.0.0/4 等非全局可路由范围）一律拒绝；只允许 80/443；重定向到内网同样拦截。因此 agent 无法借抓取或下载访问本机或内网服务。
+
+策略在 **dial 时**强制执行：transport 的 DialContext 在建立连接的瞬间重新解析主机、校验地址、并直连其中一个是校验过的 IP。只在请求前校验 URL 是不够的——重绑定服务器可以让校验时解析到公网 IP、几秒后实际连接解析到内网 IP（经典 DNS rebinding TOCTOU）；把检查放进 dialer 才保证"通过校验的地址就是被连接的地址"。这一约束覆盖初始请求和全部重定向跳转。`-search-url` 配置的检索端点是操作者显式信任的（自建 SearXNG 常在内网），与 `AllowLocal` 同级，不走该策略。
 
 ### 浏览器、HTTP、Git、代码理解工具
 
@@ -348,37 +350,21 @@ golangci-lint run ./...  # 静态检查
 
 ---
 
-## Roadmap
+## 弱模型基准（divvy-bench）
 
-- [x] 阶段 1：任务树核心引擎、持久化、调度器
-- [x] 阶段 2：LLM 接入、沙箱工具、弱模型 JSON 解析
-- [x] 阶段 3：Decomposer 与契约生成
-- [x] 阶段 4：隔离 Worker、Verifier、失败再拆
-- [x] 阶段 5：CLI、断点续跑、树状进度、mock 端到端
-- [x] 阶段 6：并行叶子执行（`-parallel`）、token 用量统计、plan-only 规划（`-plan`）
-- [x] 阶段 7：叶子级工作区隔离（`-isolate`：快照 → 隔离执行 → 验收后合并/失败回滚）
-- [x] 阶段 8：按节点 token 用量持久化（resume 累计）、plan 契约完整性检查
-- [x] 阶段 9：执行审计与成本可见性（`-git-commit` 每叶子一提交、`-plan -strict`、树视图 token 显示）
-- [x] 阶段 10：成本估算与预算护栏（内置/自定义价目表、节点级美元成本、`-max-cost`/`-budget-tokens` 会话级硬上限）
-- [x] 阶段 11：代码内容搜索（`search_files` 正则定位、glob 过滤）与会话列表（`-sessions`）
-- [x] 阶段 12：集成叶子与根目标验收（强制装配入口、端到端验收通过才 COMPLETED、失败回路由）
-- [x] 阶段 13：交互式 REPL（工头对话层 + 独立上下文叶子执行、只保留多轮压缩摘要、`/help` `/clear` `/status` `/exit`）
-- [x] 阶段 14：引导式工作流（计划评审与 `/approve` 敲定、执行中 `/add` `/redo` `/pause`、agent `ask` 提问、可 resume）
-- [x] 阶段 15：多语言项目验收（自动探测 Go/Node/Rust/Python/Makefile，按栈生成叶子与根 DoD，模型显式命令优先）
-- [x] 阶段 16：联网搜索与抓取（`-web` 开启 web_search/web_fetch、HTML 转文本、可配 DuckDuckGo/SearXNG、非公开地址与端口拦截）
-- [x] 阶段 17：扩展工具集（`-browser` headless Chrome、http_request、只读 git_status/diff/log、Go AST find_symbol、json_query）
-- [x] 阶段 18：原子多点编辑与文件原语（replace_lines 的 edits 批量、delete_path、move_path）、Go 验收失败诊断块前置
-- [x] 阶段 19：引用查找（find_symbol references 文本级用法扫描）与 finish 前确定性自检 review_diff（冲突标记/调试残留/密钥/大 diff）
-- [x] 阶段 20：二进制下载 download_file（`-web` 门控、SSRF 防护复用、20MB 上限、失败清理）与只读 sqlite_query（纯 Go modernc 驱动、mode=ro/query_only、结果集压缩）
-- [x] 阶段 21：并发正确性收尾——浏览器叶子级租约（-parallel 下多步流程不再跨叶子串台、可取消等待）与 finish 自动门控（覆盖未跟踪新文件，冲突标记/密钥硬拦截并回灌、debug/大 diff 仅告警）
-- [x] 阶段 22：少轮次与全栈诊断——read_file 的 paths 批量读（最多 8 个文件/次）、outline 顶层声明地图（Go AST 签名、其它语言模式回退）、诊断压缩扩展到 Python/Rust/Node
-- [x] 阶段 23：并发正确性收口——`trimHistory` 对齐 tool_call 边界（`-native-tools` 不再打出孤立 tool 消息）、镜像合并按快照摘要在冲突时放弃而非覆盖、声明相同产出的叶子调度互斥、契约体检接入 `Run` 路径
-- [x] 阶段 24：重试时间闸门（`-max-elapsed`，单叶子跨尝试的墙钟预算，堵住 `-max-retries 0` 的无限烧钱）、`Clone` 深拷贝修正（`ErrorHistory` 不再共享底层数组）
-- [x] 阶段 25：工程基线——CI 增加 `-race`、`golangci-lint`、gofmt 检查与浏览器 job；`pkg/models` 补齐单测（0% → 100%）；新增 `docs/architecture.md`
-- [x] 阶段 26：覆盖与健壮性收口——总覆盖率 71% → 80%（`llm` 57%→92%、`engine` 62%→95%、`cmd` 48%→66%）；`UpdateNode` 改为原子写入（回调失败不再留下半改状态）；诊断规则补齐 Makefile 与通用工作区（此前这两类工作区失败时**完全不压缩**，24KB 原始日志整个进 prompt）
-- [x] 阶段 27：停滞检测与失败语义收口——失败指纹（复用根因诊断行、数字掩码）与 `-max-stall` 让默认无限重试真正收敛；步数耗尽不再伪装成功并补上步数预算提醒；`-report` 会话复盘与 `-prune` 旧会话清理
+引擎的立论是"用工程约束而不是模型聪明程度把复杂目标做完"，这个立论需要可重复的度量。`cmd/bench` 是一个固定的目标语料库 × 真实弱模型的基准 harness：
 
-弱模型上的 Prompt 与拆分粒度仍需按具体模型微调（`-max-depth`、`-max-steps`、`-extra`）。
+```bash
+go run ./cmd/bench -list                                  # 看语料库
+go run ./cmd/bench \
+  -base-url http://127.0.0.1:11434/v1 -model qwen3.8:27b \
+  -extra '{"reasoning_effort":"none"}' \
+  -root bench-runs/$(date +%Y%m%d-%H%M%S)
+```
+
+每个目标在**全新临时工作区**里真实执行 divvy 全流程（拆解 → 叶子 → 真实 `go build`/`go test` 验收 → 根目标端到端验收），采集：成败、墙钟时间、LLM 调用数、token、成本、叶子数、以及引擎自身的失败计数器（验收失败/重试/停滞/重拆）。结果同时打印表格并写入 `<root>/report.json`，工作区保留供事后解剖（`git diff` 看模型到底改了什么）。
+
+语料库刻意小且版本化在代码里（基准的目标集漂移就无法发现回归）；当前三个目标覆盖三种任务形态：从零创建包（`string-utils`）、修复 seeded bug（`fix-average`，语料自带失败测试，harness 测试会守住"这个目标真的会失败"）、构建可运行服务（`http-health`）。默认端点是本机 Ollama，方法论与参考数字见 **[docs/weak-model-bench.md](docs/weak-model-bench.md)**。
 
 ---
 
@@ -396,3 +382,4 @@ golangci-lint run ./...  # 静态检查
 - **`-max-stall` 靠指纹比对，太宽的指纹会误伤。** 指纹优先取根因诊断行（已去重、已剥离易变细节），没有诊断规则时才回退到"输出头部 + 数字掩码"——这意味着只有数字变化的失败会被视为同一个。若某个工具链的输出结构特殊导致误判，可以 `-max-stall 0` 关掉，只用 `-max-elapsed` 兜底。
 - **`-prune` 会真删文件**（会话 JSON + 日志 + 事件流），只保留 `-keep` 个最近的会话。它永不删 `LATEST` 指向的会话，但先跑一次 `-prune -dry-run` 看看清单永远是值得的。
 - **浏览器工具需要本机 Chrome/Chromium**，且 `-parallel` 下多个叶子共享一个标签页（靠叶子级租约保证多步流程不串台），因此浏览器步骤整体是串行的。
+- **Prompt 与拆分粒度仍需按具体弱模型微调**，相关旋钮是 `-max-depth`、`-max-steps`、`-extra`（关掉 Qwen3 的 thinking 等）。
