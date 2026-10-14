@@ -7,11 +7,11 @@
 
 WEB_DIR := web
 
-.PHONY: help web-install web-build go-build test test-race vet clean
+.PHONY: help web-install web-build go-build test test-race vet bench clean
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
+	| awk 'BEGIN {FS = ":.*?## "}; {printf "  %-12s %s\n", $$1, $$2}'
 
 # Reinstall only when the lockfile changes.
 $(WEB_DIR)/node_modules: $(WEB_DIR)/package-lock.json
@@ -35,6 +35,9 @@ test: ## Run Go tests
 
 test-race: ## Run Go tests with the race detector
 	go test -race ./... -count=1
+
+bench: ## Run the weak-model benchmark against a local Ollama (see docs/weak-model-bench.md)
+	go run ./cmd/bench
 
 clean: ## Remove web build artifacts and dependencies
 	rm -rf $(WEB_DIR)/dist $(WEB_DIR)/node_modules $(WEB_DIR)/.vite
