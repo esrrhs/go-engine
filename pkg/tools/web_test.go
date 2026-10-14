@@ -98,26 +98,27 @@ func TestWeb_FetchHTML(t *testing.T) {
 func TestWeb_FetchRejectsNonStandardPort(t *testing.T) {
 	w := newTestWeb(t, "", false)
 	u := &url.URL{Scheme: "http", Host: "example.com:8080", Path: "/"}
-	if err := w.validateURL(u); err == nil || !strings.Contains(err.Error(), "port") {
+	if err := w.validateURL(context.Background(), u); err == nil || !strings.Contains(err.Error(), "port") {
 		t.Fatalf("expected port error, got %v", err)
 	}
 }
 
 func TestWeb_FetchRejectsSchemeAndPrivate(t *testing.T) {
 	w := newTestWeb(t, "", false)
+	ctx := context.Background()
 
-	if err := w.validateURL(&url.URL{Scheme: "file", Path: "/etc/passwd"}); err == nil {
+	if err := w.validateURL(ctx, &url.URL{Scheme: "file", Path: "/etc/passwd"}); err == nil {
 		t.Fatal("file scheme must be rejected")
 	}
 
 	// localhost resolves to a loopback address and must be blocked.
-	if err := w.validateURL(&url.URL{Scheme: "http", Host: "localhost"}); err == nil {
+	if err := w.validateURL(ctx, &url.URL{Scheme: "http", Host: "localhost"}); err == nil {
 		t.Fatal("loopback host must be blocked when AllowLocal is off")
 	}
 
 	// Allowed: same host passes when AllowLocal is on.
 	w.AllowLocal = true
-	if err := w.validateURL(&url.URL{Scheme: "http", Host: "localhost:9999"}); err != nil {
+	if err := w.validateURL(ctx, &url.URL{Scheme: "http", Host: "localhost:9999"}); err != nil {
 		t.Fatalf("AllowLocal should permit it: %v", err)
 	}
 }
