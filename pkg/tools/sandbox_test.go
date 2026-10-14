@@ -157,6 +157,25 @@ func TestSandbox_ReadFileLines(t *testing.T) {
 		}
 	}
 
+	// A file past the line-read pre-read limit is refused with an actionable
+	// error instead of being loaded into memory whole: a leaf that generates
+	// a huge file must not be able to OOM the process by asking for ten
+	// lines of it. bash (sed -n) remains the escape hatch.
+	var huge strings.Builder
+	for huge.Len() <= maxLineReadBytes {
+		huge.WriteString("padding line to grow the file past the pre-read limit\n")
+	}
+	if err := os.WriteFile(filepath.Join(sb.Root, "huge.txt"), []byte(huge.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sb.ReadFileLines("huge.txt", 1, 3)
+	if err == nil {
+		t.Fatal("an oversized file must be refused before the whole-file read")
+	}
+	if !strings.Contains(err.Error(), "line-read limit") {
+		t.Fatalf("error should name the limit and the fallback, got %v", err)
+	}
+
 	// A range deep inside a file larger than the whole-read 64KB cap must
 	// still be reachable — this is why ranged reads bypass ReadFile's cap.
 	sb.MaxRead = 1024

@@ -238,6 +238,13 @@ func (s *Sandbox) ReadFile(path string) (string, error) {
 	return out, nil
 }
 
+// maxLineReadBytes bounds the whole-file pre-read ReadFileLines performs
+// before slicing out the requested window (the window output itself is
+// still capped by MaxRead). Without it, asking for ten lines of a huge
+// generated file would load the entire file into memory; bash (sed -n)
+// remains available for windows into oversized files.
+const maxLineReadBytes = 4 * 1024 * 1024
+
 // ReadFileLines reads an inclusive 1-indexed line range of a text file.
 // Each returned line is prefixed with its line number ("123: ...") so the
 // model can feed exact line numbers back into replace_lines. A zero end
@@ -253,7 +260,16 @@ func (s *Sandbox) ReadFileLines(path string, start, end int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(abs)
+	f, err := os.Open(abs)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Size() > maxLineReadBytes {
+		return "", fmt.Errorf("%s is %d bytes, over the %d-byte line-read limit; "+
+			"read a window with bash (sed -n '%d,%dp') or use read_file", path, info.Size(), maxLineReadBytes, start, end)
+	}
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return "", err
 	}
