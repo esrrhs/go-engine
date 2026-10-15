@@ -56,10 +56,48 @@ divvy -report -session <id> -datadir .divvy   # 复用正式复盘
 ## 方法论注意事项
 
 - **方差**：弱模型同题不同次的输出差异很大。结论请用 `-repeat 3` 以上的成功率区间，不要用单轮数字。
-- **思考开关**：Qwen3 系默认开思考，叶子执行阶段推荐 `-extra '{"reasoning_effort":"none"}'`（约 3 倍 token 差，见 [qwen3.8-local.md](qwen3.8-local.md)）；拆解阶段保留思考质量更好。默认不传 extra，即引擎默认行为。
+- **思考开关（本地大模型的头号预算杀手）**：`ollama show qwen3.8:27b` 显示该模型
+  `capabilities.thinking` 的 **default 是 `medium`**，即默认就在思考。思考 token 不
+  计入 `/v1/chat/completions` 的可见 `content`，但实打实消耗墙钟时间：实测一次
+  **decompose 调用只产出 877 个响应 token，却耗时 981 秒（16.4 分钟）**——按
+  6~7 tok/s 推算，约 5000 个 token 花在了不对外暴露的内部思考上，直接吃掉 20 分钟
+  目标预算的大头，worker 只剩 3 分钟，最终 `context deadline exceeded`。
+  同一提示词的 A/B（max_tokens=400）：
+
+  | | 默认（thinking=medium） | `reasoning_effort=none` |
+  |---|---|---|
+  | 耗时 | 55.3s | **35.2s** |
+  | completion tokens | 400 | **285** |
+  | finish_reason | `length`（思考吃光预算，答案残缺） | **`stop`（完整作答）** |
+  | 实际回答长度 | 55 字符 | **857 字符** |
+
+  即：关掉思考后更快、更省，答案反而更完整。本地跑 27B 这类大模型时**两个阶段都
+  建议关**：`-extra '{"reasoning_effort":"none"}'`。此前"拆解阶段保留思考质量更好"
+  的说法来自 [qwen3.8-local.md](qwen3.8-local.md) 的小模型经验，在本地大模型的墙钟
+  预算下不成立——若刻意要测"思考对成功率的帮助"，请把它当作一个待验证的旋钮，
+  用 `-repeat` 多轮对比，而不是默认行为。
 - **调参实验**：`-max-stall` 默认 3 对某些模型可能偏激进——这类"默认值是否合理"的问题正是基准要回答的：固定语料、只改一个旋钮、多轮重复。
 - **harness 自身有测试**：`cmd/bench/bench_test.go` 用脚本化模型（`llm.ScriptedClient`）完整跑通一次目标运行，守住播种、git 基线、验收、指标采集全链路。harness 测试绿 = 基准失败可以归因于模型，不是工具坏了。
 
 ## 参考数字
 
 来自 `docs/qwen3.8-local.md` 的一次手工运行（qwen3.8:27b @ Ollama，`reasoning_effort=none`，`-isolate -git-commit`）：「/health HTTP 服务 + 单测」任务，6 次 LLM 调用、5808 token、约 3.5 分钟完成，生成代码自带 200/405 两条测试。新跑法的报告 JSON 可与这组数字对照。
+
+### 首轮真实基准（2026-10-15，qwen3.8:27b @ 本机 Ollama 0.34.4，M1 Pro/32GB）
+
+| 目标 | 结果 | 墙钟 | 调用 | token | 叶子 | 备注 |
+|---|---|---|---|---|---|---|
+| string-utils | ✅ | 13m08s | 10 | 27,428 | 1/1 | 默认（思考开） |
+| fix-average | ✅ | 2m15s | 5 | 8,002 | 1/1 | 默认（思考开） |
+| http-health | ❌ → ✅ | 20m 超时 → 13m45s | 8 → 24 | 17,189 → 50,072 | 0/1 → 3/3 | 关掉思考后通过，见上文 |
+
+产物均**跳出 divvy 独立复验**过，不是引擎自说自话：
+
+- string-utils：`go test ./...` → `ok strutil 0.601s`
+- http-health：`go test ./...` → `ok healthsrv 0.823s`，并实起服务验证
+  `GET /health → 200`、`POST /health → 405`
+
+**首跑就咬出两个问题**，正好说明基准的价值：一是引擎缺陷（隔离模式下 DoD 里的
+绝对路径让验收跑错目录，已修）；二是配置陷阱（思考默认 medium，墙钟被内部思考
+吞掉）。**结论：基准失败时先分清是引擎接线、配置，还是模型能力**——这次三个
+"失败"里只有一个勉强算模型侧的预算问题，其余都是我们自己的坑。
