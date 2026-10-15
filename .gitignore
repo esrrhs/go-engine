@@ -16,3 +16,7 @@ ws_*/
 
 # Editor / agent local state (session memory, scratch files)
 .workbuddy/
+
+# Benchmark runs (divvy-bench): workspaces are kept on purpose so a failed
+# goal can be dissected with git diff, but they must not show up as untracked.
+bench-runs/
